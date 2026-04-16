@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": ".NET Launch SleuthRay",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/SleuthRay/bin/Debug/net10.0/SleuthRay.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/SleuthRay",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ]
+}
