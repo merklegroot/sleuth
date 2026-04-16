@@ -29,6 +29,7 @@ Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
 Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
 Vector2 playerVel = Vector2.Zero;
 Vector2 cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
+bool prevHasInput = false;
 
 const int frameWidth = 16;
 const int frameHeight = 20;
@@ -90,13 +91,23 @@ while (!Raylib.WindowShouldClose())
     float speed = playerVel.Length();
     // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
     // After stopping, we "run out" a few frames to land on a rest pose (sprite frame 1) instead of freezing mid-stride.
-    const float movingThreshold = 18f;
-    const float stoppedThreshold = 6f;
     bool atRestInCycle = cycleIndex == 1 || cycleIndex == 3; // both map to middle sprite frame
 
-    if (speed > movingThreshold)
+    const float minInputAnimRate = 0.25f;
+    const float minCoastAnimRate = 0.10f;
+    const float idleSpeedThreshold = 1.5f;
+
+    if (hasInput)
     {
-        float rate = MathF.Max(0.35f, speed / moveSpeed);
+        // Ensure a quick tap still produces at least one visible frame change.
+        if (!prevHasInput)
+        {
+            cycleIndex = (cycleIndex + 1) % frameCycle.Length;
+            animTimer = 0f;
+        }
+
+        // Always animate at least a little while keys are held, even if speed is minimal.
+        float rate = MathF.Max(minInputAnimRate, speed / moveSpeed);
         animTimer += dt * rate;
         while (animTimer >= frameDurationSeconds)
         {
@@ -104,10 +115,10 @@ while (!Raylib.WindowShouldClose())
             cycleIndex = (cycleIndex + 1) % frameCycle.Length;
         }
     }
-    else if (speed > stoppedThreshold)
+    else if (speed > idleSpeedThreshold)
     {
         // Coast: keep stepping slowly while velocity bleeds off.
-        float rate = MathF.Max(0.18f, speed / moveSpeed);
+        float rate = MathF.Max(minCoastAnimRate, speed / moveSpeed);
         animTimer += dt * rate;
         while (animTimer >= frameDurationSeconds)
         {
@@ -174,6 +185,8 @@ while (!Raylib.WindowShouldClose())
     {
         break;
     }
+
+    prevHasInput = hasInput;
 }
 
 map.Unload();
