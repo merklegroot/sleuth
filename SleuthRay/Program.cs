@@ -1,15 +1,11 @@
-﻿using System.Reflection;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Xml.Linq;
-using System.Text.Json;
 using Raylib_cs;
 
 const int screenWidth = 800;
 const int screenHeight = 450;
 
-// Load names from embedded JSON and choose a murder victim
-var victimName = NameGenerator.GenerateVictimName();
-string message = $"The victim is {victimName}. Press any key to exit.";
+const string message = "Press ESC to exit.";
 
 Raylib.InitWindow(screenWidth, screenHeight, "SleuthRay");
 Raylib.SetTargetFPS(60);
@@ -21,6 +17,9 @@ Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_f
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
 const float mapScale = 3f;
+/// <summary>World-space half extents of the player collision box (centered on <see cref="playerWorldPos"/>).</summary>
+const float playerHitHalfW = 12f;
+const float playerHitHalfH = 26f;
 const float moveSpeed = 200f; // world pixels (after scaling) per second
 const float accel = 2200f; // higher = snappier starts/stops
 const float friction = 2000f; // higher = quicker slow-down when no input
@@ -65,7 +64,21 @@ while (!Raylib.WindowShouldClose())
         playerVel = Approach(playerVel, Vector2.Zero, friction * dt);
     }
 
-    playerWorldPos += playerVel * dt;
+    Vector2 moveDelta = playerVel * dt;
+    // Resolve collision on each axis so we can slide along walls.
+    playerWorldPos.X += moveDelta.X;
+    if (map.OverlapsBlockingTile(playerWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+    {
+        playerWorldPos.X -= moveDelta.X;
+        playerVel.X = 0f;
+    }
+
+    playerWorldPos.Y += moveDelta.Y;
+    if (map.OverlapsBlockingTile(playerWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+    {
+        playerWorldPos.Y -= moveDelta.Y;
+        playerVel.Y = 0f;
+    }
 
     // Update facing direction from movement direction (prefer input, fall back to velocity).
     Vector2 faceDir = hasInput ? moveDir : (playerVel.LengthSquared() > 0.001f ? Vector2.Normalize(playerVel) : Vector2.Zero);
@@ -82,11 +95,11 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
-    // Clamp player to map bounds.
+    // Clamp player to map bounds (keep collision box inside the map rectangle).
     float worldW = map.Width * map.TileWidth * mapScale;
     float worldH = map.Height * map.TileHeight * mapScale;
-    playerWorldPos.X = Math.Clamp(playerWorldPos.X, 0, Math.Max(0, worldW));
-    playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, 0, Math.Max(0, worldH));
+    playerWorldPos.X = Math.Clamp(playerWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+    playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
 
     float speed = playerVel.Length();
     // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
@@ -262,13 +275,67 @@ sealed class TileMap
         };
     }
 
+    /// <summary>Tiled may set flip/mirror flags in the high bits of a GID; mask them off for logic.</summary>
+    public static int ClearGidFlags(int gid) => gid & 0x1FFFFFFF;
+
+    /// <summary>Layer tile GID that counts as a solid wall (from your map data).</summary>
+    public const int WallTileGid = 97;
+
+    public int GetGidAtTile(int tx, int ty)
+    {
+        if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
+        {
+            return -1;
+        }
+
+        return ClearGidFlags(Gids[ty * Width + tx]);
+    }
+
+    public static bool IsBlockingGid(int gid) => gid == WallTileGid;
+
+    /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps any blocking tile.</summary>
+    public bool OverlapsBlockingTile(Vector2 centerWorld, float scale, float halfW, float halfH)
+    {
+        float tw = TileWidth * scale;
+        float th = TileHeight * scale;
+
+        float left = centerWorld.X - halfW;
+        float top = centerWorld.Y - halfH;
+        float right = centerWorld.X + halfW;
+        float bottom = centerWorld.Y + halfH;
+
+        int tx0 = (int)MathF.Floor(left / tw);
+        int ty0 = (int)MathF.Floor(top / th);
+        int tx1 = (int)MathF.Floor((right - 1e-4f) / tw);
+        int ty1 = (int)MathF.Floor((bottom - 1e-4f) / th);
+
+        for (int ty = ty0; ty <= ty1; ty++)
+        {
+            for (int tx = tx0; tx <= tx1; tx++)
+            {
+                int gid = GetGidAtTile(tx, ty);
+                if (gid < 0)
+                {
+                    return true;
+                }
+
+                if (IsBlockingGid(gid))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public void Draw(float scale, Vector2 offset)
     {
         for (int y = 0; y < Height; y++)
         {
             for (int x = 0; x < Width; x++)
             {
-                int gid = Gids[y * Width + x];
+                int gid = ClearGidFlags(Gids[y * Width + x]);
                 if (gid == 0)
                 {
                     continue;
@@ -345,38 +412,5 @@ sealed class TileMap
         }
 
         return gids;
-    }
-}
-
-static class NameGenerator
-{
-    private static readonly Random _random = new();
-
-    public static string GenerateVictimName()
-    {
-        using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("names.json");
-        if (stream is null)
-        {
-            return "Unknown Victim";
-        }
-
-        using var reader = new StreamReader(stream);
-        string json = reader.ReadToEnd();
-
-        var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-
-        var firstNames = root.GetProperty("firstNames");
-        var lastNames = root.GetProperty("lastNames");
-
-        if (firstNames.GetArrayLength() == 0 || lastNames.GetArrayLength() == 0)
-        {
-            return "Unknown Victim";
-        }
-
-        var first = firstNames[_random.Next(firstNames.GetArrayLength())].GetProperty("name").GetString() ?? "Unknown";
-        var last = lastNames[_random.Next(lastNames.GetArrayLength())].GetString() ?? "Unknown";
-
-        return $"{first} {last}";
     }
 }
