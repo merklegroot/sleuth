@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Collections.Generic;
+using System.Numerics;
 using System.Xml.Linq;
 using Raylib_cs;
 
@@ -39,6 +40,12 @@ int currentRow = 0; // 0=down, 1=left, 2=right, 3=up
 float animTimer = 0f;
 const float frameDurationSeconds = 0.18f;
 const float settleStepSeconds = 0.12f;
+
+const float bulletSpeed = 420f;
+const float bulletSpawnPad = 22f;
+const float bulletRadius = 2f;
+const float bulletHitHalf = 1.5f;
+var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 
 while (!Raylib.WindowShouldClose())
 {
@@ -165,13 +172,58 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
+    // Camera follow (used for map + bullets this frame).
+    Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
+    float camT = 1f - MathF.Exp(-cameraFollow * dt);
+    cameraOffsetSmoothed = Vector2.Lerp(cameraOffsetSmoothed, cameraOffsetTarget, camT);
+
+    if (Raylib.IsKeyPressed(KeyboardKey.KEY_SPACE))
+    {
+        Vector2 dir;
+        if (hasInput)
+        {
+            // Diagonal (e.g. W+D) uses the same normalized direction as movement.
+            dir = Vector2.Normalize(input);
+        }
+        else if (playerVel.LengthSquared() > 4f)
+        {
+            dir = Vector2.Normalize(playerVel);
+        }
+        else
+        {
+            dir = currentRow switch
+            {
+                0 => new Vector2(0f, 1f),
+                1 => new Vector2(-1f, 0f),
+                2 => new Vector2(1f, 0f),
+                3 => new Vector2(0f, -1f),
+                _ => new Vector2(0f, 1f)
+            };
+        }
+
+        Vector2 vel = dir * bulletSpeed;
+        bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel));
+    }
+
+    for (int i = bullets.Count - 1; i >= 0; i--)
+    {
+        (Vector2 pos, Vector2 vel) = bullets[i];
+        Vector2 newPos = pos + vel * dt;
+        if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
+            || map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
+        {
+            bullets.RemoveAt(i);
+        }
+        else
+        {
+            bullets[i] = (newPos, vel);
+        }
+    }
+
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.DARKBLUE);
 
     // Draw map (16x16 tiles) behind UI/sprites.
-    Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
-    float t = 1f - MathF.Exp(-cameraFollow * dt);
-    cameraOffsetSmoothed = Vector2.Lerp(cameraOffsetSmoothed, cameraOffsetTarget, t);
     map.Draw(scale: mapScale, offset: cameraOffsetSmoothed);
 
     int textWidth = Raylib.MeasureText(message, 24);
@@ -191,6 +243,14 @@ while (!Raylib.WindowShouldClose())
     var dest = new Rectangle(charX, charY, destW, destH);
 
     Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
+
+    map.DrawOverlay(scale: mapScale, offset: cameraOffsetSmoothed);
+
+    for (int i = 0; i < bullets.Count; i++)
+    {
+        Vector2 screen = cameraOffsetSmoothed + bullets[i].Pos;
+        Raylib.DrawCircleV(screen, bulletRadius, Color.YELLOW);
+    }
 
     Raylib.EndDrawing();
 
@@ -229,7 +289,8 @@ sealed class TileMap
     public required int TilesetColumns { get; init; }
     public required Texture2D TilesetTexture { get; init; }
 
-    public required int[] Gids { get; init; } // row-major, length = Width*Height
+    /// <summary>Tile GID grids per layer, bottom-to-top (same order as in the TMX).</summary>
+    public required int[][] LayerGids { get; init; }
 
     public static TileMap LoadFromTmx(string tmxPath)
     {
@@ -251,16 +312,24 @@ sealed class TileMap
         (int columns, string imagePath) = LoadTsx(tsxPath);
         Texture2D texture = Raylib.LoadTexture(imagePath);
 
-        XElement layerEl = mapEl.Elements("layer").FirstOrDefault() ?? throw new InvalidOperationException("TMX missing <layer>.");
-        XElement dataEl = layerEl.Element("data") ?? throw new InvalidOperationException("TMX layer missing <data>.");
-        string encoding = (string?)dataEl.Attribute("encoding") ?? "";
-        if (!string.Equals(encoding, "csv", StringComparison.OrdinalIgnoreCase))
+        var layerList = new List<int[]>();
+        foreach (XElement layerEl in mapEl.Elements("layer"))
         {
-            throw new NotSupportedException($"Unsupported TMX encoding '{encoding}'. Expected csv.");
+            XElement dataEl = layerEl.Element("data") ?? throw new InvalidOperationException($"Layer '{(string?)layerEl.Attribute("name")}' missing <data>.");
+            string encoding = (string?)dataEl.Attribute("encoding") ?? "";
+            if (!string.Equals(encoding, "csv", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new NotSupportedException($"Unsupported TMX encoding '{encoding}' in layer '{(string?)layerEl.Attribute("name")}'. Expected csv.");
+            }
+
+            string csv = dataEl.Value;
+            layerList.Add(ParseCsvGids(csv, width * height));
         }
 
-        string csv = dataEl.Value;
-        int[] gids = ParseCsvGids(csv, width * height);
+        if (layerList.Count == 0)
+        {
+            throw new InvalidOperationException("TMX missing <layer> elements.");
+        }
 
         return new TileMap
         {
@@ -271,7 +340,7 @@ sealed class TileMap
             TilesetFirstGid = firstGid,
             TilesetColumns = columns,
             TilesetTexture = texture,
-            Gids = gids
+            LayerGids = layerList.ToArray()
         };
     }
 
@@ -281,17 +350,27 @@ sealed class TileMap
     /// <summary>Layer tile GID that counts as a solid wall (from your map data).</summary>
     public const int WallTileGid = 97;
 
-    public int GetGidAtTile(int tx, int ty)
+    public static bool IsBlockingGid(int gid) => gid == WallTileGid;
+
+    /// <summary>True if any layer has a blocking tile at the given tile coordinates.</summary>
+    public bool IsTileBlocking(int tx, int ty)
     {
         if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
         {
-            return -1;
+            return true;
         }
 
-        return ClearGidFlags(Gids[ty * Width + tx]);
-    }
+        int idx = ty * Width + tx;
+        foreach (int[] layer in LayerGids)
+        {
+            if (IsBlockingGid(ClearGidFlags(layer[idx])))
+            {
+                return true;
+            }
+        }
 
-    public static bool IsBlockingGid(int gid) => gid == WallTileGid;
+        return false;
+    }
 
     /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps any blocking tile.</summary>
     public bool OverlapsBlockingTile(Vector2 centerWorld, float scale, float halfW, float halfH)
@@ -313,13 +392,7 @@ sealed class TileMap
         {
             for (int tx = tx0; tx <= tx1; tx++)
             {
-                int gid = GetGidAtTile(tx, ty);
-                if (gid < 0)
-                {
-                    return true;
-                }
-
-                if (IsBlockingGid(gid))
+                if (IsTileBlocking(tx, ty))
                 {
                     return true;
                 }
@@ -329,13 +402,34 @@ sealed class TileMap
         return false;
     }
 
+    /// <summary>Draws all tile layers except the last (when there are multiple layers). Single-layer maps draw that layer only.</summary>
     public void Draw(float scale, Vector2 offset)
     {
+        int n = LayerGids.Length;
+        int count = n > 1 ? n - 1 : n;
+        for (int li = 0; li < count; li++)
+        {
+            DrawLayer(li, scale, offset);
+        }
+    }
+
+    /// <summary>Draws the topmost tile layer on top of sprites (only when the map has 2+ layers).</summary>
+    public void DrawOverlay(float scale, Vector2 offset)
+    {
+        if (LayerGids.Length > 1)
+        {
+            DrawLayer(LayerGids.Length - 1, scale, offset);
+        }
+    }
+
+    private void DrawLayer(int layerIndex, float scale, Vector2 offset)
+    {
+        int[] layer = LayerGids[layerIndex];
         for (int y = 0; y < Height; y++)
         {
             for (int x = 0; x < Width; x++)
             {
-                int gid = ClearGidFlags(Gids[y * Width + x]);
+                int gid = ClearGidFlags(layer[y * Width + x]);
                 if (gid == 0)
                 {
                     continue;
