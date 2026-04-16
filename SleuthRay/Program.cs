@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Numerics;
+using System.Xml.Linq;
 using System.Text.Json;
 using Raylib_cs;
 
@@ -12,6 +13,9 @@ string message = $"The victim is {victimName}. Press any key to exit.";
 
 Raylib.InitWindow(screenWidth, screenHeight, "SleuthRay");
 Raylib.SetTargetFPS(60);
+
+TileMap map = TileMap.LoadFromTmx(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../tiled/map.tmx")));
+Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
 Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_frame16x20.png");
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
@@ -36,6 +40,9 @@ while (!Raylib.WindowShouldClose())
 
     Raylib.BeginDrawing();
     Raylib.ClearBackground(Color.DARKBLUE);
+
+    // Draw map (16x16 tiles) behind UI/sprites.
+    map.Draw(scale: 3f, offset: new Vector2(0, 0));
 
     int textWidth = Raylib.MeasureText(message, 24);
     int textX = (screenWidth - textWidth) / 2;
@@ -64,8 +71,146 @@ while (!Raylib.WindowShouldClose())
     }
 }
 
+map.Unload();
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+sealed class TileMap
+{
+    public required int Width { get; init; }
+    public required int Height { get; init; }
+    public required int TileWidth { get; init; }
+    public required int TileHeight { get; init; }
+
+    public required int TilesetFirstGid { get; init; }
+    public required int TilesetColumns { get; init; }
+    public required Texture2D TilesetTexture { get; init; }
+
+    public required int[] Gids { get; init; } // row-major, length = Width*Height
+
+    public static TileMap LoadFromTmx(string tmxPath)
+    {
+        var doc = XDocument.Load(tmxPath);
+        XElement mapEl = doc.Root ?? throw new InvalidOperationException("TMX missing <map> root.");
+
+        int width = (int)mapEl.Attribute("width")!;
+        int height = (int)mapEl.Attribute("height")!;
+        int tileWidth = (int)mapEl.Attribute("tilewidth")!;
+        int tileHeight = (int)mapEl.Attribute("tileheight")!;
+
+        XElement tilesetEl = mapEl.Element("tileset") ?? throw new InvalidOperationException("TMX missing <tileset>.");
+        int firstGid = (int)tilesetEl.Attribute("firstgid")!;
+        string tsxSource = (string?)tilesetEl.Attribute("source") ?? throw new InvalidOperationException("TMX tileset missing source.");
+
+        string tmxDir = Path.GetDirectoryName(tmxPath) ?? ".";
+        string tsxPath = Path.GetFullPath(Path.Combine(tmxDir, tsxSource));
+
+        (int columns, string imagePath) = LoadTsx(tsxPath);
+        Texture2D texture = Raylib.LoadTexture(imagePath);
+
+        XElement layerEl = mapEl.Elements("layer").FirstOrDefault() ?? throw new InvalidOperationException("TMX missing <layer>.");
+        XElement dataEl = layerEl.Element("data") ?? throw new InvalidOperationException("TMX layer missing <data>.");
+        string encoding = (string?)dataEl.Attribute("encoding") ?? "";
+        if (!string.Equals(encoding, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException($"Unsupported TMX encoding '{encoding}'. Expected csv.");
+        }
+
+        string csv = dataEl.Value;
+        int[] gids = ParseCsvGids(csv, width * height);
+
+        return new TileMap
+        {
+            Width = width,
+            Height = height,
+            TileWidth = tileWidth,
+            TileHeight = tileHeight,
+            TilesetFirstGid = firstGid,
+            TilesetColumns = columns,
+            TilesetTexture = texture,
+            Gids = gids
+        };
+    }
+
+    public void Draw(float scale, Vector2 offset)
+    {
+        for (int y = 0; y < Height; y++)
+        {
+            for (int x = 0; x < Width; x++)
+            {
+                int gid = Gids[y * Width + x];
+                if (gid == 0)
+                {
+                    continue;
+                }
+
+                int tileId = gid - TilesetFirstGid;
+                if (tileId < 0)
+                {
+                    continue;
+                }
+
+                int srcX = (tileId % TilesetColumns) * TileWidth;
+                int srcY = (tileId / TilesetColumns) * TileHeight;
+                var src = new Rectangle(srcX, srcY, TileWidth, TileHeight);
+
+                float destX = offset.X + x * TileWidth * scale;
+                float destY = offset.Y + y * TileHeight * scale;
+                var dest = new Rectangle(destX, destY, TileWidth * scale, TileHeight * scale);
+
+                Raylib.DrawTexturePro(TilesetTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
+            }
+        }
+    }
+
+    public void Unload()
+    {
+        Raylib.UnloadTexture(TilesetTexture);
+    }
+
+    private static (int columns, string imagePath) LoadTsx(string tsxPath)
+    {
+        var doc = XDocument.Load(tsxPath);
+        XElement tsEl = doc.Root ?? throw new InvalidOperationException("TSX missing <tileset> root.");
+        int columns = (int)tsEl.Attribute("columns")!;
+
+        XElement imageEl = tsEl.Element("image") ?? throw new InvalidOperationException("TSX missing <image>.");
+        string imageSource = (string?)imageEl.Attribute("source") ?? throw new InvalidOperationException("TSX image missing source.");
+
+        // Prefer the copy we imported into the game if it exists, otherwise resolve relative to the TSX.
+        string imported = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../assets/tiles/atlas_16x.png"));
+        if (File.Exists(imported))
+        {
+            return (columns, imported);
+        }
+
+        string tsxDir = Path.GetDirectoryName(tsxPath) ?? ".";
+        string imagePath = Path.GetFullPath(Path.Combine(tsxDir, imageSource));
+        return (columns, imagePath);
+    }
+
+    private static int[] ParseCsvGids(string csv, int expectedCount)
+    {
+        var gids = new int[expectedCount];
+        int i = 0;
+        foreach (string part in csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (i >= expectedCount)
+            {
+                break;
+            }
+
+            gids[i++] = int.Parse(part);
+        }
+
+        if (i != expectedCount)
+        {
+            throw new InvalidOperationException($"TMX CSV had {i} entries, expected {expectedCount}.");
+        }
+
+        return gids;
+    }
+}
 
 static class NameGenerator
 {
