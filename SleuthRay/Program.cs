@@ -20,6 +20,11 @@ Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
 Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_frame16x20.png");
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
+const float mapScale = 3f;
+const float moveSpeed = 140f; // world pixels (after scaling) per second
+Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
+Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
+
 const int frameWidth = 16;
 const int frameHeight = 20;
 
@@ -31,8 +36,39 @@ const double frameDurationSeconds = 0.18;
 
 while (!Raylib.WindowShouldClose())
 {
+    float dt = Raylib.GetFrameTime();
+
+    Vector2 input = Vector2.Zero;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) input.Y -= 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_S)) input.Y += 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) input.X -= 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) input.X += 1;
+
+    bool isMoving = input != Vector2.Zero;
+    if (isMoving)
+    {
+        input = Vector2.Normalize(input);
+        playerWorldPos += input * moveSpeed * dt;
+
+        // Direction rows: down, left, right, up
+        if (MathF.Abs(input.X) > MathF.Abs(input.Y))
+        {
+            currentRow = input.X < 0 ? 1 : 2;
+        }
+        else
+        {
+            currentRow = input.Y < 0 ? 3 : 0;
+        }
+    }
+
+    // Clamp player to map bounds.
+    float worldW = map.Width * map.TileWidth * mapScale;
+    float worldH = map.Height * map.TileHeight * mapScale;
+    playerWorldPos.X = Math.Clamp(playerWorldPos.X, 0, Math.Max(0, worldW));
+    playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, 0, Math.Max(0, worldH));
+
     double now = Raylib.GetTime();
-    if (now - lastFrameTime >= frameDurationSeconds)
+    if (isMoving && now - lastFrameTime >= frameDurationSeconds)
     {
         cycleIndex = (cycleIndex + 1) % frameCycle.Length;
         lastFrameTime = now;
@@ -42,7 +78,8 @@ while (!Raylib.WindowShouldClose())
     Raylib.ClearBackground(Color.DARKBLUE);
 
     // Draw map (16x16 tiles) behind UI/sprites.
-    map.Draw(scale: 3f, offset: new Vector2(0, 0));
+    Vector2 cameraOffset = playerScreenPos - playerWorldPos;
+    map.Draw(scale: mapScale, offset: cameraOffset);
 
     int textWidth = Raylib.MeasureText(message, 24);
     int textX = (screenWidth - textWidth) / 2;
@@ -52,20 +89,19 @@ while (!Raylib.WindowShouldClose())
     int currentFrame = frameCycle[cycleIndex];
     var src = new Rectangle(currentFrame * frameWidth, currentRow * frameHeight, frameWidth, frameHeight);
 
-    // Render at double the previous scale (1.5x -> 3x).
+    // Character stays centered; map moves under it.
     const float scale = 3f;
     float destW = frameWidth * scale;
     float destH = frameHeight * scale;
-    float charX = screenWidth / 2f - destW / 2f;
-    float charY = screenHeight / 2f - destH - 10f;
+    float charX = playerScreenPos.X - destW / 2f;
+    float charY = playerScreenPos.Y - destH / 2f;
     var dest = new Rectangle(charX, charY, destW, destH);
 
     Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
 
     Raylib.EndDrawing();
 
-    KeyboardKey key = (KeyboardKey)Raylib.GetKeyPressed();
-    if (key != KeyboardKey.KEY_NULL)
+    if (Raylib.IsKeyPressed(KeyboardKey.KEY_ESCAPE))
     {
         break;
     }
@@ -178,10 +214,16 @@ sealed class TileMap
         string imageSource = (string?)imageEl.Attribute("source") ?? throw new InvalidOperationException("TSX image missing source.");
 
         // Prefer the copy we imported into the game if it exists, otherwise resolve relative to the TSX.
-        string imported = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../assets/tiles/atlas_16x.png"));
-        if (File.Exists(imported))
+        string importedInProject = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../assets/tiles/atlas_16x.png"));
+        if (File.Exists(importedInProject))
         {
-            return (columns, imported);
+            return (columns, importedInProject);
+        }
+
+        string importedAtRepoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../assets/tiles/atlas_16x.png"));
+        if (File.Exists(importedAtRepoRoot))
+        {
+            return (columns, importedAtRepoRoot);
         }
 
         string tsxDir = Path.GetDirectoryName(tsxPath) ?? ".";
