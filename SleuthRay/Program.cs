@@ -48,11 +48,15 @@ const float bulletSpeed = 420f;
 const float bulletSpawnPad = 22f;
 const float bulletHitHalf = 1.5f;
 const float bulletRadius = 2.5f;
-/// <summary>Revolver art faces right; rotation aligns barrel with aim.</summary>
+/// <summary>Revolver art faces +X; rotation aligns barrel with aim.</summary>
 const float gunSpriteScale = 2.5f;
-const float gunHoldOffset = 16f;
+/// <summary>Grip sits this many pixels "behind" the shot line from the character center (toward the body).</summary>
+const float gripBehindAimPx = 10f;
+/// <summary>Horizontal pivot: left side of sprite ≈ grip (barrel extends to the right in texture space).</summary>
+const float gunGripFracX = 0.22f;
+/// <summary>Vertical pivot: middle of grip in the art.</summary>
+const float gunGripFracY = 0.52f;
 const float gunFlashDuration = 0.22f;
-const float Rad2Deg = 180f / MathF.PI;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 float gunFlashTimer = 0f;
 Vector2 lastShotDir = new(0f, 1f);
@@ -261,14 +265,44 @@ while (!Raylib.WindowShouldClose())
 
     if (gunFlashTimer > 0f)
     {
-        float aimDeg = MathF.Atan2(lastShotDir.Y, lastShotDir.X) * Rad2Deg;
-        float gw = gunTexture.Width * gunSpriteScale;
-        float gh = gunTexture.Height * gunSpriteScale;
-        Vector2 gunCenter = playerScreenPos + lastShotDir * gunHoldOffset;
-        var gSrc = new Rectangle(0, 0, gunTexture.Width, gunTexture.Height);
-        var gDest = new Rectangle(gunCenter.X - gw * 0.5f, gunCenter.Y - gh * 0.5f, gw, gh);
-        var gOrigin = new Vector2(gw * 0.5f, gh * 0.5f);
-        Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, aimDeg, Color.WHITE);
+        // Match 4-way character facing: dominant axis (like walk rows), left = mirrored sprite, no free rotation.
+        int gunRow = FacingRowFromDir(lastShotDir);
+        Vector2 facing = CardinalUnitFromRow(gunRow);
+
+        float tw = gunTexture.Width;
+        float th = gunTexture.Height;
+        Rectangle gSrc;
+        float rotDeg;
+        bool mirrorSrc = false;
+
+        switch (gunRow)
+        {
+            case 1: // left — mirror (same idea as a flipped walk frame), no extra rotation
+                gSrc = new Rectangle(tw, 0, -tw, th);
+                rotDeg = 0f;
+                mirrorSrc = true;
+                break;
+            case 0: // down — barrel was +X in art, rotate +90° (clockwise) to point +Y
+                gSrc = new Rectangle(0, 0, tw, th);
+                rotDeg = 90f;
+                break;
+            case 3: // up
+                gSrc = new Rectangle(0, 0, tw, th);
+                rotDeg = -90f;
+                break;
+            default: // right
+                gSrc = new Rectangle(0, 0, tw, th);
+                rotDeg = 0f;
+                break;
+        }
+
+        float gw = tw * gunSpriteScale;
+        float gh = th * gunSpriteScale;
+        Vector2 gripWorld = playerScreenPos - facing * gripBehindAimPx;
+        float ox = mirrorSrc ? gw * (1f - gunGripFracX) : gw * gunGripFracX;
+        var gOrigin = new Vector2(ox, gh * gunGripFracY);
+        var gDest = new Rectangle(gripWorld.X - gOrigin.X, gripWorld.Y - gOrigin.Y, gw, gh);
+        Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, rotDeg, Color.WHITE);
     }
 
     map.DrawOverlay(scale: mapScale, offset: cameraOffsetSmoothed);
@@ -293,6 +327,31 @@ map.Unload();
 Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+/// <summary>Same dominant-axis rule as the walk sprite: 0=down, 1=left, 2=right, 3=up.</summary>
+static int FacingRowFromDir(Vector2 d)
+{
+    if (d.X == 0f && d.Y == 0f)
+    {
+        return 0;
+    }
+
+    if (MathF.Abs(d.X) > MathF.Abs(d.Y))
+    {
+        return d.X < 0f ? 1 : 2;
+    }
+
+    return d.Y < 0f ? 3 : 0;
+}
+
+static Vector2 CardinalUnitFromRow(int row) => row switch
+{
+    0 => new Vector2(0f, 1f),
+    1 => new Vector2(-1f, 0f),
+    2 => new Vector2(1f, 0f),
+    3 => new Vector2(0f, -1f),
+    _ => new Vector2(0f, 1f)
+};
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
 {
