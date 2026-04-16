@@ -21,9 +21,14 @@ Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_f
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
 const float mapScale = 3f;
-const float moveSpeed = 140f; // world pixels (after scaling) per second
+const float moveSpeed = 200f; // world pixels (after scaling) per second
+const float accel = 2200f; // higher = snappier starts/stops
+const float friction = 2000f; // higher = quicker slow-down when no input
+const float cameraFollow = 14f; // higher = tighter camera
 Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
 Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
+Vector2 playerVel = Vector2.Zero;
+Vector2 cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
 
 const int frameWidth = 16;
 const int frameHeight = 20;
@@ -44,20 +49,34 @@ while (!Raylib.WindowShouldClose())
     if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) input.X -= 1;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) input.X += 1;
 
-    bool isMoving = input != Vector2.Zero;
-    if (isMoving)
-    {
-        input = Vector2.Normalize(input);
-        playerWorldPos += input * moveSpeed * dt;
+    bool hasInput = input != Vector2.Zero;
+    Vector2 moveDir = hasInput ? Vector2.Normalize(input) : Vector2.Zero;
 
+    // Accel towards desired velocity; when no input, apply friction.
+    Vector2 desiredVel = moveDir * moveSpeed;
+    if (hasInput)
+    {
+        playerVel = Approach(playerVel, desiredVel, accel * dt);
+    }
+    else
+    {
+        playerVel = Approach(playerVel, Vector2.Zero, friction * dt);
+    }
+
+    playerWorldPos += playerVel * dt;
+
+    // Update facing direction from movement direction (prefer input, fall back to velocity).
+    Vector2 faceDir = hasInput ? moveDir : (playerVel.LengthSquared() > 0.001f ? Vector2.Normalize(playerVel) : Vector2.Zero);
+    if (faceDir != Vector2.Zero)
+    {
         // Direction rows: down, left, right, up
-        if (MathF.Abs(input.X) > MathF.Abs(input.Y))
+        if (MathF.Abs(faceDir.X) > MathF.Abs(faceDir.Y))
         {
-            currentRow = input.X < 0 ? 1 : 2;
+            currentRow = faceDir.X < 0 ? 1 : 2;
         }
         else
         {
-            currentRow = input.Y < 0 ? 3 : 0;
+            currentRow = faceDir.Y < 0 ? 3 : 0;
         }
     }
 
@@ -68,6 +87,7 @@ while (!Raylib.WindowShouldClose())
     playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, 0, Math.Max(0, worldH));
 
     double now = Raylib.GetTime();
+    bool isMoving = playerVel.LengthSquared() > 0.1f;
     if (isMoving && now - lastFrameTime >= frameDurationSeconds)
     {
         cycleIndex = (cycleIndex + 1) % frameCycle.Length;
@@ -78,8 +98,10 @@ while (!Raylib.WindowShouldClose())
     Raylib.ClearBackground(Color.DARKBLUE);
 
     // Draw map (16x16 tiles) behind UI/sprites.
-    Vector2 cameraOffset = playerScreenPos - playerWorldPos;
-    map.Draw(scale: mapScale, offset: cameraOffset);
+    Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
+    float t = 1f - MathF.Exp(-cameraFollow * dt);
+    cameraOffsetSmoothed = Vector2.Lerp(cameraOffsetSmoothed, cameraOffsetTarget, t);
+    map.Draw(scale: mapScale, offset: cameraOffsetSmoothed);
 
     int textWidth = Raylib.MeasureText(message, 24);
     int textX = (screenWidth - textWidth) / 2;
@@ -110,6 +132,18 @@ while (!Raylib.WindowShouldClose())
 map.Unload();
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
+{
+    Vector2 delta = target - current;
+    float dist = delta.Length();
+    if (dist <= maxDelta || dist == 0f)
+    {
+        return target;
+    }
+
+    return current + delta / dist * maxDelta;
+}
 
 sealed class TileMap
 {
