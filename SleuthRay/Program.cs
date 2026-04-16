@@ -352,7 +352,10 @@ sealed class TileMap
 
     public static bool IsBlockingGid(int gid) => gid == WallTileGid;
 
-    /// <summary>True if any layer has a blocking tile at the given tile coordinates.</summary>
+    /// <summary>
+    /// Lower layers: only <see cref="WallTileGid"/> blocks.
+    /// Top layer (when there are 2+ layers): any non-empty tile counts as an object you cannot walk through.
+    /// </summary>
     public bool IsTileBlocking(int tx, int ty)
     {
         if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
@@ -361,15 +364,23 @@ sealed class TileMap
         }
 
         int idx = ty * Width + tx;
-        foreach (int[] layer in LayerGids)
+        int n = LayerGids.Length;
+
+        if (n == 1)
         {
-            if (IsBlockingGid(ClearGidFlags(layer[idx])))
+            return IsBlockingGid(ClearGidFlags(LayerGids[0][idx]));
+        }
+
+        for (int li = 0; li < n - 1; li++)
+        {
+            if (IsBlockingGid(ClearGidFlags(LayerGids[li][idx])))
             {
                 return true;
             }
         }
 
-        return false;
+        int overlayGid = ClearGidFlags(LayerGids[n - 1][idx]);
+        return overlayGid != 0;
     }
 
     /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps any blocking tile.</summary>
