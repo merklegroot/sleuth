@@ -289,6 +289,9 @@ sealed class TileMap
     public required int TilesetColumns { get; init; }
     public required Texture2D TilesetTexture { get; init; }
 
+    /// <summary>CPU copy of the tileset for alpha tests (unloaded with the texture).</summary>
+    public required Image AtlasImage { get; init; }
+
     /// <summary>Tile GID grids per layer, bottom-to-top (same order as in the TMX).</summary>
     public required int[][] LayerGids { get; init; }
 
@@ -311,6 +314,7 @@ sealed class TileMap
 
         (int columns, string imagePath) = LoadTsx(tsxPath);
         Texture2D texture = Raylib.LoadTexture(imagePath);
+        Image atlasImage = Raylib.LoadImageFromTexture(texture);
 
         var layerList = new List<int[]>();
         foreach (XElement layerEl in mapEl.Elements("layer"))
@@ -340,6 +344,7 @@ sealed class TileMap
             TilesetFirstGid = firstGid,
             TilesetColumns = columns,
             TilesetTexture = texture,
+            AtlasImage = atlasImage,
             LayerGids = layerList.ToArray()
         };
     }
@@ -352,38 +357,10 @@ sealed class TileMap
 
     public static bool IsBlockingGid(int gid) => gid == WallTileGid;
 
-    /// <summary>
-    /// Lower layers: only <see cref="WallTileGid"/> blocks.
-    /// Top layer (when there are 2+ layers): any non-empty tile counts as an object you cannot walk through.
-    /// </summary>
-    public bool IsTileBlocking(int tx, int ty)
-    {
-        if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
-        {
-            return true;
-        }
+    /// <summary>Pixels with alpha above this count as solid for collision.</summary>
+    public const byte CollisionAlphaThreshold = 32;
 
-        int idx = ty * Width + tx;
-        int n = LayerGids.Length;
-
-        if (n == 1)
-        {
-            return IsBlockingGid(ClearGidFlags(LayerGids[0][idx]));
-        }
-
-        for (int li = 0; li < n - 1; li++)
-        {
-            if (IsBlockingGid(ClearGidFlags(LayerGids[li][idx])))
-            {
-                return true;
-            }
-        }
-
-        int overlayGid = ClearGidFlags(LayerGids[n - 1][idx]);
-        return overlayGid != 0;
-    }
-
-    /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps any blocking tile.</summary>
+    /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps opaque pixels of any blocking tile.</summary>
     public bool OverlapsBlockingTile(Vector2 centerWorld, float scale, float halfW, float halfH)
     {
         float tw = TileWidth * scale;
@@ -403,7 +380,94 @@ sealed class TileMap
         {
             for (int tx = tx0; tx <= tx1; tx++)
             {
-                if (IsTileBlocking(tx, ty))
+                if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
+                {
+                    return true;
+                }
+
+                int idx = ty * Width + tx;
+                int n = LayerGids.Length;
+
+                if (n == 1)
+                {
+                    int gid = ClearGidFlags(LayerGids[0][idx]);
+                    if (IsBlockingGid(gid) && TileSpriteOpaqueOverlapsWorldRect(gid, tx, ty, left, top, right, bottom, scale))
+                    {
+                        return true;
+                    }
+                }
+                else
+                {
+                    for (int li = 0; li < n - 1; li++)
+                    {
+                        int gid = ClearGidFlags(LayerGids[li][idx]);
+                        if (IsBlockingGid(gid) && TileSpriteOpaqueOverlapsWorldRect(gid, tx, ty, left, top, right, bottom, scale))
+                        {
+                            return true;
+                        }
+                    }
+
+                    int overlayGid = ClearGidFlags(LayerGids[n - 1][idx]);
+                    if (overlayGid != 0 && TileSpriteOpaqueOverlapsWorldRect(overlayGid, tx, ty, left, top, right, bottom, scale))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>True if any tile pixel under the intersection of the tile and the world AABB is opaque enough to block.</summary>
+    private bool TileSpriteOpaqueOverlapsWorldRect(int gid, int tx, int ty, float pLeft, float pTop, float pRight, float pBottom, float scale)
+    {
+        int tileId = gid - TilesetFirstGid;
+        if (tileId < 0)
+        {
+            return false;
+        }
+
+        float tw = TileWidth * scale;
+        float th = TileHeight * scale;
+        float tileWorldLeft = tx * tw;
+        float tileWorldTop = ty * th;
+
+        float il = MathF.Max(pLeft, tileWorldLeft);
+        float ir = MathF.Min(pRight, tileWorldLeft + tw);
+        float it = MathF.Max(pTop, tileWorldTop);
+        float ib = MathF.Min(pBottom, tileWorldTop + th);
+        if (il >= ir || it >= ib)
+        {
+            return false;
+        }
+
+        int sx0 = (int)MathF.Floor((il - tileWorldLeft) / scale);
+        int sx1 = (int)MathF.Floor((ir - tileWorldLeft - 1e-4f) / scale);
+        int sy0 = (int)MathF.Floor((it - tileWorldTop) / scale);
+        int sy1 = (int)MathF.Floor((ib - tileWorldTop - 1e-4f) / scale);
+
+        sx0 = Math.Clamp(sx0, 0, TileWidth - 1);
+        sx1 = Math.Clamp(sx1, 0, TileWidth - 1);
+        sy0 = Math.Clamp(sy0, 0, TileHeight - 1);
+        sy1 = Math.Clamp(sy1, 0, TileHeight - 1);
+
+        int atlasBaseX = (tileId % TilesetColumns) * TileWidth;
+        int atlasBaseY = (tileId / TilesetColumns) * TileHeight;
+
+        for (int sy = sy0; sy <= sy1; sy++)
+        {
+            for (int sx = sx0; sx <= sx1; sx++)
+            {
+                int ax = atlasBaseX + sx;
+                int ay = atlasBaseY + sy;
+                if (ax < 0 || ay < 0 || ax >= AtlasImage.Width || ay >= AtlasImage.Height)
+                {
+                    continue;
+                }
+
+                Color c = Raylib.GetImageColor(AtlasImage, ax, ay);
+                if (c.A > CollisionAlphaThreshold)
                 {
                     return true;
                 }
@@ -467,6 +531,7 @@ sealed class TileMap
 
     public void Unload()
     {
+        Raylib.UnloadImage(AtlasImage);
         Raylib.UnloadTexture(TilesetTexture);
     }
 
