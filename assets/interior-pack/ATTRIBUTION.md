@@ -1,22 +1,5 @@
-## Super Retro World – Interior Pack Attribution
+# Interior pack (Super Retro World)
 
-This project uses assets from **"FREE RPG asset tileset interior pack (Super Retro World by Gif)"** by **Gif**.
+Full attribution and licence notes for this tileset are kept in one place:
 
-- Author: **Gif (Jeff)**  
-- Source: `https://gif-superretroworld.itch.io/interior-pack`
-
-### Licence Summary
-
-According to the itch.io page:
-
-- You **can**:
-  - Use the assets for non-commercial **and** commercial projects.
-  - Adapt and/or modify the assets to match your project.
-- You **can not**:
-  - Distribute or sell these assets directly (even modified).
-  - Claim the assets as your own.
-  - Use the assets for NFT / metaverse / AI projects.
-
-**Credit appreciated!**  
-If you ship this game publicly, please keep this attribution file in the repository and credit **Gif – Super Retro World interior pack** in your game credits.
-
+**[Repository root `ATTRIBUTION.md`](../../ATTRIBUTION.md)** (section *Gif (Super Retro World) — character & interior packs*).

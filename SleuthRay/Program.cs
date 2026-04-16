@@ -17,6 +17,9 @@ Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
 Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_frame16x20.png");
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
+Texture2D gunTexture = Raylib.LoadTexture("assets/weapons/1Revolver01.png");
+Raylib.SetTextureFilter(gunTexture, TextureFilter.TEXTURE_FILTER_POINT);
+
 const float mapScale = 3f;
 /// <summary>World-space half extents of the player collision box (centered on <see cref="playerWorldPos"/>).</summary>
 const float playerHitHalfW = 12f;
@@ -43,9 +46,16 @@ const float settleStepSeconds = 0.12f;
 
 const float bulletSpeed = 420f;
 const float bulletSpawnPad = 22f;
-const float bulletRadius = 2f;
 const float bulletHitHalf = 1.5f;
+const float bulletRadius = 2.5f;
+/// <summary>Revolver art faces right; rotation aligns barrel with aim.</summary>
+const float gunSpriteScale = 2.5f;
+const float gunHoldOffset = 16f;
+const float gunFlashDuration = 0.22f;
+const float Rad2Deg = 180f / MathF.PI;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
+float gunFlashTimer = 0f;
+Vector2 lastShotDir = new(0f, 1f);
 
 while (!Raylib.WindowShouldClose())
 {
@@ -177,6 +187,8 @@ while (!Raylib.WindowShouldClose())
     float camT = 1f - MathF.Exp(-cameraFollow * dt);
     cameraOffsetSmoothed = Vector2.Lerp(cameraOffsetSmoothed, cameraOffsetTarget, camT);
 
+    gunFlashTimer = MathF.Max(0f, gunFlashTimer - dt);
+
     if (Raylib.IsKeyPressed(KeyboardKey.KEY_SPACE))
     {
         Vector2 dir;
@@ -200,6 +212,9 @@ while (!Raylib.WindowShouldClose())
                 _ => new Vector2(0f, 1f)
             };
         }
+
+        lastShotDir = dir;
+        gunFlashTimer = gunFlashDuration;
 
         Vector2 vel = dir * bulletSpeed;
         bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel));
@@ -244,6 +259,18 @@ while (!Raylib.WindowShouldClose())
 
     Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
 
+    if (gunFlashTimer > 0f)
+    {
+        float aimDeg = MathF.Atan2(lastShotDir.Y, lastShotDir.X) * Rad2Deg;
+        float gw = gunTexture.Width * gunSpriteScale;
+        float gh = gunTexture.Height * gunSpriteScale;
+        Vector2 gunCenter = playerScreenPos + lastShotDir * gunHoldOffset;
+        var gSrc = new Rectangle(0, 0, gunTexture.Width, gunTexture.Height);
+        var gDest = new Rectangle(gunCenter.X - gw * 0.5f, gunCenter.Y - gh * 0.5f, gw, gh);
+        var gOrigin = new Vector2(gw * 0.5f, gh * 0.5f);
+        Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, aimDeg, Color.WHITE);
+    }
+
     map.DrawOverlay(scale: mapScale, offset: cameraOffsetSmoothed);
 
     for (int i = 0; i < bullets.Count; i++)
@@ -263,6 +290,7 @@ while (!Raylib.WindowShouldClose())
 }
 
 map.Unload();
+Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
 

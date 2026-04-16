@@ -1,46 +1,34 @@
-# Attribution
+# Third-party assets
 
-## Super Retro World – Character Pack Attribution
+This project uses the packs below. Keep this file in the repository and credit the authors in shipped builds (credits screen, store page, or similar).
 
-This project uses assets from **"FREE RPG asset character pack (Super Retro World by Gif)"** by **Gif**.
+---
 
-- Author: **Gif (Jeff)**  
-- Source: `https://gif-superretroworld.itch.io/character-pack`
+## Ranitaya Studios — Ranitayas Guns Pack (16+ pixelart guns)
 
-### Licence Summary
+- **Pack:** [Ranitayas Guns Pack (16+ pixelart guns)](https://ranitaya-studios.itch.io/ranitayas-guns-pack-16-pixelart-guns)  
+- **Creator:** [Ranitaya Studios](https://ranitaya-studios.itch.io)  
 
-According to the itch.io page:
+The creator has stated on itch.io that the pack may be used for commercial projects; still read the pack page and comments for the latest terms. Credit **Ranitaya Studios** / **Ranitayas Guns Pack** where you list third-party art.
 
-- You **can**:
-  - Use the assets for non-commercial **and** commercial projects.
-  - Adapt and/or modify the assets to match your project.
-- You **can not**:
-  - Distribute or sell these assets directly (even modified).
-  - Claim the assets as your own.
-  - Use the assets for NFT / metaverse / AI projects.
+---
 
-**Credit appreciated!**  
-If you ship this game publicly, please keep this attribution file in the repository and credit **Gif – Super Retro World character pack** in your game credits.
+## Gif (Super Retro World) — character & interior packs
 
-## Super Retro World – Interior Pack Attribution
+Pixel art from **Gif (Jeff)** under the **Super Retro World** line:
 
-This project uses assets from **"FREE RPG asset tileset interior pack (Super Retro World by Gif)"** by **Gif**.
+| Pack | Source |
+|------|--------|
+| FREE RPG asset character pack (Super Retro World) | https://gif-superretroworld.itch.io/character-pack |
+| FREE RPG asset tileset interior pack (Super Retro World) | https://gif-superretroworld.itch.io/interior-pack |
 
-- Author: **Gif (Jeff)**  
-- Source: `https://gif-superretroworld.itch.io/interior-pack`
+**Licence (summary from each pack’s itch.io page)**  
 
-### Licence Summary
+You may use the assets in non-commercial and commercial projects and adapt or modify them for your game. You may not redistribute or sell the raw asset files (even modified), claim them as your own, or use them for NFT / metaverse / AI projects. Credit appreciated — e.g. **Gif — Super Retro World** in credits.
 
-According to the itch.io page:
+---
 
-- You **can**:
-  - Use the assets for non-commercial **and** commercial projects.
-  - Adapt and/or modify the assets to match your project.
-- You **can not**:
-  - Distribute or sell these assets directly (even modified).
-  - Claim the assets as your own.
-  - Use the assets for NFT / metaverse / AI projects.
+## Suggested in-game credit lines
 
-**Credit appreciated!**  
-If you ship this game publicly, please keep this attribution file in the repository and credit **Gif – Super Retro World interior pack** in your game credits.
-
+- *Ranitayas Guns Pack* — Ranitaya Studios  
+- *Super Retro World* character & interior art — Gif  
