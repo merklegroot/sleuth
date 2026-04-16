@@ -36,8 +36,9 @@ const int frameHeight = 20;
 ReadOnlySpan<int> frameCycle = [0, 1, 2, 1]; // 1-2-3-2
 int cycleIndex = 0;
 int currentRow = 0; // 0=down, 1=left, 2=right, 3=up
-double lastFrameTime = Raylib.GetTime();
-const double frameDurationSeconds = 0.18;
+float animTimer = 0f;
+const float frameDurationSeconds = 0.18f;
+const float settleStepSeconds = 0.12f;
 
 while (!Raylib.WindowShouldClose())
 {
@@ -86,12 +87,58 @@ while (!Raylib.WindowShouldClose())
     playerWorldPos.X = Math.Clamp(playerWorldPos.X, 0, Math.Max(0, worldW));
     playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, 0, Math.Max(0, worldH));
 
-    double now = Raylib.GetTime();
-    bool isMoving = playerVel.LengthSquared() > 0.1f;
-    if (isMoving && now - lastFrameTime >= frameDurationSeconds)
+    float speed = playerVel.Length();
+    // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
+    // After stopping, we "run out" a few frames to land on a rest pose (sprite frame 1) instead of freezing mid-stride.
+    const float movingThreshold = 18f;
+    const float stoppedThreshold = 6f;
+    bool atRestInCycle = cycleIndex == 1 || cycleIndex == 3; // both map to middle sprite frame
+
+    if (speed > movingThreshold)
     {
-        cycleIndex = (cycleIndex + 1) % frameCycle.Length;
-        lastFrameTime = now;
+        float rate = MathF.Max(0.35f, speed / moveSpeed);
+        animTimer += dt * rate;
+        while (animTimer >= frameDurationSeconds)
+        {
+            animTimer -= frameDurationSeconds;
+            cycleIndex = (cycleIndex + 1) % frameCycle.Length;
+        }
+    }
+    else if (speed > stoppedThreshold)
+    {
+        // Coast: keep stepping slowly while velocity bleeds off.
+        float rate = MathF.Max(0.18f, speed / moveSpeed);
+        animTimer += dt * rate;
+        while (animTimer >= frameDurationSeconds)
+        {
+            animTimer -= frameDurationSeconds;
+            cycleIndex = (cycleIndex + 1) % frameCycle.Length;
+        }
+    }
+    else
+    {
+        // Nearly stopped: ease to idle frame without snapping.
+        if (!atRestInCycle)
+        {
+            animTimer += dt;
+            while (animTimer >= settleStepSeconds)
+            {
+                animTimer -= settleStepSeconds;
+                cycleIndex = (cycleIndex + 1) % frameCycle.Length;
+                if (cycleIndex == 1 || cycleIndex == 3)
+                {
+                    break;
+                }
+            }
+        }
+        else
+        {
+            animTimer = 0f;
+            if (cycleIndex == 3)
+            {
+                cycleIndex = 1;
+            }
+        }
     }
 
     Raylib.BeginDrawing();
