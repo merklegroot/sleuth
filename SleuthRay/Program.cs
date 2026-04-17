@@ -50,6 +50,7 @@ const float bulletHitHalf = 1.5f;
 const float bulletRadius = 2.5f;
 /// <summary>Revolver art faces +X; rotation aligns barrel with aim.</summary>
 const float gunSpriteScale = 2.5f;
+const float Rad2Deg = 180f / MathF.PI;
 const float gunFlashDuration = 0.22f;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 float gunFlashTimer = 0f;
@@ -259,33 +260,10 @@ while (!Raylib.WindowShouldClose())
 
     if (gunFlashTimer > 0f)
     {
-        // Match 4-way character facing: dominant axis (like walk rows), left = mirrored sprite, no free rotation.
-        int gunRow = FacingRowFromDir(lastShotDir);
-
         float tw = gunTexture.Width;
         float th = gunTexture.Height;
-        Rectangle gSrc;
-        float rotDeg;
-
-        switch (gunRow)
-        {
-            case 1: // left — mirror (same idea as a flipped walk frame), no extra rotation
-                gSrc = new Rectangle(tw, 0, -tw, th);
-                rotDeg = 0f;
-                break;
-            case 0: // down — barrel was +X in art, rotate +90° (clockwise) to point +Y
-                gSrc = new Rectangle(0, 0, tw, th);
-                rotDeg = 90f;
-                break;
-            case 3: // up
-                gSrc = new Rectangle(0, 0, tw, th);
-                rotDeg = -90f;
-                break;
-            default: // right
-                gSrc = new Rectangle(0, 0, tw, th);
-                rotDeg = 0f;
-                break;
-        }
+        var gSrc = new Rectangle(0, 0, tw, th);
+        float rotDeg = MathF.Atan2(lastShotDir.Y, lastShotDir.X) * Rad2Deg;
 
         float gw = tw * gunSpriteScale;
         float gh = th * gunSpriteScale;
@@ -318,22 +296,6 @@ map.Unload();
 Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
-
-/// <summary>Same dominant-axis rule as the walk sprite: 0=down, 1=left, 2=right, 3=up.</summary>
-static int FacingRowFromDir(Vector2 d)
-{
-    if (d.X == 0f && d.Y == 0f)
-    {
-        return 0;
-    }
-
-    if (MathF.Abs(d.X) > MathF.Abs(d.Y))
-    {
-        return d.X < 0f ? 1 : 2;
-    }
-
-    return d.Y < 0f ? 3 : 0;
-}
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
 {
