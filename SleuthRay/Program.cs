@@ -44,6 +44,10 @@ bool prevHasInput = false;
 bool prevSpaceHeld = false;
 bool prevGraveHeld = false;
 bool prevEscapeHeld = false;
+/// <summary>Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).</summary>
+bool[] r2AnalogArmed = [true, true, true, true];
+bool[] prevRightTrigger1Held = new bool[4];
+bool[] prevRightTrigger2Held = new bool[4];
 
 const int frameWidth = 16;
 const int frameHeight = 20;
@@ -371,17 +375,42 @@ while (!Raylib.WindowShouldClose())
 
     bool spaceHeld = Raylib.IsKeyDown(KeyboardKey.KEY_SPACE);
     bool padFirePressed = false;
+    bool triggerR2FirePressed = false;
+    const float r2AnalogReleaseBelow = 0.18f;
+    const float r2AnalogPullAbove = 0.30f;
     for (int g = 0; g < 4; g++)
     {
-        if (Raylib.IsGamepadAvailable(g)
-            && Raylib.IsGamepadButtonPressed(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+        if (!Raylib.IsGamepadAvailable(g))
+        {
+            continue;
+        }
+
+        if (Raylib.IsGamepadButtonPressed(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
         {
             padFirePressed = true;
-            break;
+        }
+
+        bool rt1Held = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
+        bool rt2Held = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+        if ((rt1Held && !prevRightTrigger1Held[g]) || (rt2Held && !prevRightTrigger2Held[g]))
+        {
+            triggerR2FirePressed = true;
+        }
+
+        float rtPressure = TriggerAxisToPressure(
+            Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_TRIGGER));
+        if (rtPressure < r2AnalogReleaseBelow)
+        {
+            r2AnalogArmed[g] = true;
+        }
+        else if (r2AnalogArmed[g] && rtPressure > r2AnalogPullAbove)
+        {
+            triggerR2FirePressed = true;
+            r2AnalogArmed[g] = false;
         }
     }
 
-    bool firePressed = (spaceHeld && !prevSpaceHeld) || padFirePressed;
+    bool firePressed = (spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed;
     if (firePressed)
     {
         Vector2 dir;
@@ -569,6 +598,20 @@ while (!Raylib.WindowShouldClose())
     prevSpaceHeld = spaceHeld;
     prevGraveHeld = graveHeld;
     prevEscapeHeld = escapeHeld;
+
+    for (int g = 0; g < 4; g++)
+    {
+        if (!Raylib.IsGamepadAvailable(g))
+        {
+            prevRightTrigger1Held[g] = false;
+            prevRightTrigger2Held[g] = false;
+            r2AnalogArmed[g] = true;
+            continue;
+        }
+
+        prevRightTrigger1Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
+        prevRightTrigger2Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+    }
 }
 
 map.Unload();
@@ -745,6 +788,17 @@ static string FilterGamepadMappingText(string raw)
     }
 
     return string.Join('\n', kept);
+}
+
+/// <summary>Maps GLFW/Raylib trigger axis (often 0..1 or -1..1) to 0..1 pressure for R2/L2-style axes.</summary>
+static float TriggerAxisToPressure(float raw)
+{
+    if (raw < 0f)
+    {
+        return Math.Clamp((raw + 1f) * 0.5f, 0f, 1f);
+    }
+
+    return Math.Clamp(raw, 0f, 1f);
 }
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
