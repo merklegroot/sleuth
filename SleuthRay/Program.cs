@@ -77,10 +77,19 @@ const float wandererAnimFrameSeconds = 0.2f;
 bool wandererAlive = true;
 float wandererRespawnTimer = 0f;
 const float wandererRespawnDelay = 2.8f;
+const int wandererMaxHealth = 6;
+int wandererHealth = wandererMaxHealth;
+const float wandererHealthBarPadX = 4f;
+const float wandererHealthBarHeight = 5f;
+const float wandererHealthBarGapAboveSprite = 6f;
+const float wandererHitFlashDuration = 0.20f;
+float wandererHitFlashTimer = 0f;
 
 while (!Raylib.WindowShouldClose())
 {
     float dt = Raylib.GetFrameTime();
+
+    wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
 
     Vector2 input = Vector2.Zero;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) input.Y -= 1;
@@ -215,6 +224,8 @@ while (!Raylib.WindowShouldClose())
             wandererVel = Vector2.Zero;
             wandererWanderDir = new Vector2(1f, 0f);
             wandererTurnTimer = 0f;
+            wandererHealth = wandererMaxHealth;
+            wandererHitFlashTimer = 0f;
             wandererAlive = true;
         }
     }
@@ -326,9 +337,14 @@ while (!Raylib.WindowShouldClose())
         else if (wandererAlive && CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
         {
             bullets.RemoveAt(i);
-            wandererAlive = false;
-            wandererVel = Vector2.Zero;
-            wandererRespawnTimer = wandererRespawnDelay;
+            wandererHitFlashTimer = wandererHitFlashDuration;
+            wandererHealth--;
+            if (wandererHealth <= 0)
+            {
+                wandererAlive = false;
+                wandererVel = Vector2.Zero;
+                wandererRespawnTimer = wandererRespawnDelay;
+            }
         }
         else
         {
@@ -363,7 +379,33 @@ while (!Raylib.WindowShouldClose())
         float wanderCharX = wanderScreen.X - destW / 2f;
         float wanderCharY = wanderScreen.Y - destH / 2f;
         var wanderDest = new Rectangle(wanderCharX, wanderCharY, destW, destH);
-        Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, Color.WHITE);
+        Color wanderTint = Color.WHITE;
+        if (wandererHitFlashTimer > 0f)
+        {
+            float t = Math.Clamp(wandererHitFlashTimer / wandererHitFlashDuration, 0f, 1f);
+            // Strong red tint: keep red at full, push green/blue way down, then fade back to white.
+            const byte targetG = 25;
+            const byte targetB = 25;
+            byte g = (byte)(255 + (targetG - 255) * t);
+            byte b = (byte)(255 + (targetB - 255) * t);
+            wanderTint = new Color((byte)255, g, b, (byte)255);
+        }
+
+        Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, wanderTint);
+
+        float barW = destW - wandererHealthBarPadX * 2f;
+        float barLeft = wanderScreen.X - barW * 0.5f;
+        float barTop = wanderCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
+        var barBg = new Rectangle(barLeft, barTop, barW, wandererHealthBarHeight);
+        Raylib.DrawRectangleRec(barBg, new Color(45, 12, 12, 255));
+        float hpFrac = wandererHealth / (float)wandererMaxHealth;
+        if (hpFrac > 0f)
+        {
+            var barFill = new Rectangle(barLeft, barTop, barW * hpFrac, wandererHealthBarHeight);
+            Raylib.DrawRectangleRec(barFill, new Color(60, 180, 90, 255));
+        }
+
+        Raylib.DrawRectangleLinesEx(barBg, 1f, new Color(20, 20, 20, 255));
     }
 
     float charX = playerScreenPos.X - destW / 2f;
