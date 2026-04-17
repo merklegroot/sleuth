@@ -30,6 +30,7 @@ const float playerHitHalfH = 26f;
 const float moveSpeed = 200f; // world pixels (after scaling) per second
 const float accel = 2200f; // higher = snappier starts/stops
 const float friction = 2000f; // higher = quicker slow-down when no input
+const float stickDeadZone = 0.2f;
 const float cameraFollow = 14f; // higher = tighter camera
 Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
 Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
@@ -92,17 +93,50 @@ while (!Raylib.WindowShouldClose())
 
     wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
 
-    Vector2 input = Vector2.Zero;
-    if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) input.Y -= 1;
-    if (Raylib.IsKeyDown(KeyboardKey.KEY_S)) input.Y += 1;
-    if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) input.X -= 1;
-    if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) input.X += 1;
+    Vector2 keyInput = Vector2.Zero;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) keyInput.Y -= 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_S)) keyInput.Y += 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) keyInput.X -= 1;
+    if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) keyInput.X += 1;
 
-    bool hasInput = input != Vector2.Zero;
-    Vector2 moveDir = hasInput ? Vector2.Normalize(input) : Vector2.Zero;
+    Vector2 stick = Vector2.Zero;
+    int gamepad = -1;
+    for (int g = 0; g < 4; g++)
+    {
+        if (Raylib.IsGamepadAvailable(g))
+        {
+            gamepad = g;
+            break;
+        }
+    }
+
+    if (gamepad >= 0)
+    {
+        stick.X = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
+        stick.Y = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+    }
+
+    bool keyHeld = keyInput != Vector2.Zero;
+    float stickDeadZoneSq = stickDeadZone * stickDeadZone;
+    float stickLenSq = stick.LengthSquared();
+    bool stickHeld = stickLenSq > stickDeadZoneSq;
+
+    bool hasInput = keyHeld || stickHeld;
+    Vector2 moveDir = Vector2.Zero;
+    float moveScale = 1f;
+    if (keyHeld)
+    {
+        moveDir = Vector2.Normalize(keyInput);
+    }
+    else if (stickHeld)
+    {
+        float stickLen = MathF.Sqrt(stickLenSq);
+        moveDir = stick / stickLen;
+        moveScale = MathF.Min(1f, stickLen);
+    }
 
     // Accel towards desired velocity; when no input, apply friction.
-    Vector2 desiredVel = moveDir * moveSpeed;
+    Vector2 desiredVel = moveDir * moveSpeed * moveScale;
     if (hasInput)
     {
         playerVel = Approach(playerVel, desiredVel, accel * dt);
@@ -301,7 +335,7 @@ while (!Raylib.WindowShouldClose())
         if (hasInput)
         {
             // Diagonal (e.g. W+D) uses the same normalized direction as movement.
-            dir = Vector2.Normalize(input);
+            dir = moveDir;
         }
         else if (playerVel.LengthSquared() > 4f)
         {
@@ -444,6 +478,8 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawCircleV(screen, bulletRadius, Color.YELLOW);
     }
 
+    DrawInputReadbackOverlay(gamepad, stick, keyHeld, keyInput, stickHeld, hasInput, moveDir, moveScale);
+
     Raylib.EndDrawing();
 
     if (Raylib.IsKeyPressed(KeyboardKey.KEY_ESCAPE))
@@ -459,6 +495,82 @@ Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(wandererTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+/// <summary>Shows raw reads from keyboard and every gamepad slot so we can see which index carries the stick.</summary>
+static void DrawInputReadbackOverlay(
+    int movementGamepad,
+    Vector2 movementStick,
+    bool keyHeld,
+    Vector2 keyInput,
+    bool stickHeld,
+    bool hasInput,
+    Vector2 moveDir,
+    float moveScale)
+{
+    const int pad = 6;
+    const int font = 10;
+    const int lineH = font + 3;
+    int x = pad;
+    int y = pad;
+    int line = 0;
+    var text = new Color(235, 245, 255, 255);
+    var label = new Color(160, 175, 195, 255);
+    var hi = new Color(120, 255, 160, 255);
+
+    void Row(string s, Color c)
+    {
+        Raylib.DrawText(s, x, y + line * lineH, font, c);
+        line++;
+    }
+
+    // Fixed panel; enough lines for header + keys + 4 gamepads * 2 + summary.
+    Raylib.DrawRectangle(pad - 3, pad - 3, 520, 268, new Color(0, 0, 0, 170));
+
+    Row("INPUT READBACK (gamepad slots + keys)", label);
+    Row(
+        $"keys WASD raw=({keyInput.X:F0},{keyInput.Y:F0}) held={keyHeld}  "
+        + $"W={(Raylib.IsKeyDown(KeyboardKey.KEY_W) ? 1 : 0)} A={(Raylib.IsKeyDown(KeyboardKey.KEY_A) ? 1 : 0)} "
+        + $"S={(Raylib.IsKeyDown(KeyboardKey.KEY_S) ? 1 : 0)} D={(Raylib.IsKeyDown(KeyboardKey.KEY_D) ? 1 : 0)}",
+        text);
+
+    for (int g = 0; g < 4; g++)
+    {
+        bool ok = Raylib.IsGamepadAvailable(g);
+        int axCount = Raylib.GetGamepadAxisCount(g);
+        string name = ok ? Raylib.GetGamepadName_(g) : "";
+        if (name.Length > 36)
+        {
+            name = string.Concat(name.AsSpan(0, 33), "...");
+        }
+
+        float lx = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
+        float ly = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+        float rx = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_X);
+        float ry = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_Y);
+        float lt = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_TRIGGER);
+        float rt = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_TRIGGER);
+
+        Color c0 = ok ? text : label;
+        Row($"gp[{g}] available={ok} axisCount={axCount} name=\"{name}\"", c0);
+        Row(
+            $"     LX={lx:F3} LY={ly:F3}  RX={rx:F3} RY={ry:F3}  LT={lt:F3} RT={rt:F3}",
+            ok ? text : label);
+    }
+
+    Row(
+        $"MOVE CODE: firstAvailIdx={movementGamepad} stick=({movementStick.X:F3},{movementStick.Y:F3}) "
+        + $"stickHeld={stickHeld} hasInput={hasInput}",
+        label);
+    Row(
+        $"          moveDir=({moveDir.X:F3},{moveDir.Y:F3}) moveScale={moveScale:F3}",
+        hasInput ? hi : text);
+
+    int lastBtn = Raylib.GetGamepadButtonPressed();
+    if (lastBtn >= 0)
+    {
+        Row($"last gamepad button pressed (enum value)={lastBtn}", text);
+    }
+}
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
 {
