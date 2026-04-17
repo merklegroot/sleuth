@@ -17,6 +17,9 @@ Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
 Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_frame16x20.png");
 Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
+Texture2D wandererTexture = Raylib.LoadTexture("assets/characters/character_4_frame16x20.png");
+Raylib.SetTextureFilter(wandererTexture, TextureFilter.TEXTURE_FILTER_POINT);
+
 Texture2D gunTexture = Raylib.LoadTexture("assets/weapons/1Revolver01.png");
 Raylib.SetTextureFilter(gunTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
@@ -57,6 +60,20 @@ const float gunFlashDuration = 0.22f;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 float gunFlashTimer = 0f;
 Vector2 lastShotDir = new(0f, 1f);
+
+/// <summary>NPC shares player strip layout (16×20, 4 rows × 4 walk frames).</summary>
+Vector2 wandererWorldPos = FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
+Vector2 wandererVel = Vector2.Zero;
+Vector2 wandererWanderDir = new Vector2(1f, 0f);
+float wandererTurnTimer = 0f;
+int wandererCycleIndex = 0;
+int wandererRow = 0;
+float wandererAnimTimer = 0f;
+const float wandererSpeed = 95f;
+const float wandererAccel = 1600f;
+const float wandererTurnMin = 1.1f;
+const float wandererTurnMax = 3.2f;
+const float wandererAnimFrameSeconds = 0.2f;
 
 while (!Raylib.WindowShouldClose())
 {
@@ -183,6 +200,59 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
+    // Wanderer NPC: pick a new random 8-way heading every few seconds; slide on walls like the player.
+    wandererTurnTimer -= dt;
+    if (wandererTurnTimer <= 0f)
+    {
+        float ang = Random.Shared.Next(0, 8) * (MathF.PI / 4f);
+        wandererWanderDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
+        wandererTurnTimer = wandererTurnMin + Random.Shared.NextSingle() * (wandererTurnMax - wandererTurnMin);
+    }
+
+    Vector2 wanderDesiredVel = wandererWanderDir * wandererSpeed;
+    wandererVel = Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
+
+    Vector2 npcDelta = wandererVel * dt;
+    wandererWorldPos.X += npcDelta.X;
+    if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+    {
+        wandererWorldPos.X -= npcDelta.X;
+        wandererVel.X = 0f;
+        wandererTurnTimer = 0f;
+    }
+
+    wandererWorldPos.Y += npcDelta.Y;
+    if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+    {
+        wandererWorldPos.Y -= npcDelta.Y;
+        wandererVel.Y = 0f;
+        wandererTurnTimer = 0f;
+    }
+
+    wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+    wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+
+    Vector2 wFace = wandererVel.LengthSquared() > 4f ? Vector2.Normalize(wandererVel) : wandererWanderDir;
+    if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
+    {
+        wandererRow = wFace.X < 0f ? 1 : 2;
+    }
+    else
+    {
+        wandererRow = wFace.Y < 0f ? 3 : 0;
+    }
+
+    float wSpeed = wandererVel.Length();
+    if (wSpeed > 10f)
+    {
+        wandererAnimTimer += dt * MathF.Max(0.35f, wSpeed / wandererSpeed);
+        while (wandererAnimTimer >= wandererAnimFrameSeconds)
+        {
+            wandererAnimTimer -= wandererAnimFrameSeconds;
+            wandererCycleIndex = (wandererCycleIndex + 1) % frameCycle.Length;
+        }
+    }
+
     // Camera follow (used for map + bullets this frame).
     Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
     float camT = 1f - MathF.Exp(-cameraFollow * dt);
@@ -247,6 +317,10 @@ while (!Raylib.WindowShouldClose())
     int textY = screenHeight / 2 + 40;
     Raylib.DrawText(message, textX, textY, 24, Color.RAYWHITE);
 
+    int wanderFrame = frameCycle[wandererCycleIndex];
+    var wanderSrc = new Rectangle(wanderFrame * frameWidth, wandererRow * frameHeight, frameWidth, frameHeight);
+    Vector2 wanderScreen = cameraOffsetSmoothed + wandererWorldPos;
+
     int currentFrame = frameCycle[cycleIndex];
     var src = new Rectangle(currentFrame * frameWidth, currentRow * frameHeight, frameWidth, frameHeight);
 
@@ -254,6 +328,11 @@ while (!Raylib.WindowShouldClose())
     const float scale = 3f;
     float destW = frameWidth * scale;
     float destH = frameHeight * scale;
+    float wanderCharX = wanderScreen.X - destW / 2f;
+    float wanderCharY = wanderScreen.Y - destH / 2f;
+    var wanderDest = new Rectangle(wanderCharX, wanderCharY, destW, destH);
+    Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, Color.WHITE);
+
     float charX = playerScreenPos.X - destW / 2f;
     float charY = playerScreenPos.Y - destH / 2f;
     var dest = new Rectangle(charX, charY, destW, destH);
@@ -302,6 +381,7 @@ while (!Raylib.WindowShouldClose())
 
 map.Unload();
 Raylib.UnloadTexture(gunTexture);
+Raylib.UnloadTexture(wandererTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
 
@@ -315,6 +395,52 @@ static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
     }
 
     return current + delta / dist * maxDelta;
+}
+
+/// <summary>Uses <paramref name="preferred"/> if clear; otherwise nearest tile center in expanding Chebyshev rings.</summary>
+static Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH)
+{
+    if (!m.OverlapsBlockingTile(preferred, scale, halfW, halfH))
+    {
+        return preferred;
+    }
+
+    float tw = m.TileWidth * scale;
+    float th = m.TileHeight * scale;
+    int px = (int)MathF.Floor(preferred.X / tw);
+    int py = (int)MathF.Floor(preferred.Y / th);
+    px = Math.Clamp(px, 0, m.Width - 1);
+    py = Math.Clamp(py, 0, m.Height - 1);
+
+    int maxR = m.Width + m.Height + 2;
+    for (int r = 0; r <= maxR; r++)
+    {
+        for (int dx = -r; dx <= r; dx++)
+        {
+            for (int dy = -r; dy <= r; dy++)
+            {
+                if (r != 0 && Math.Abs(dx) != r && Math.Abs(dy) != r)
+                {
+                    continue;
+                }
+
+                int tx = px + dx;
+                int ty = py + dy;
+                if (tx < 0 || ty < 0 || tx >= m.Width || ty >= m.Height)
+                {
+                    continue;
+                }
+
+                var center = new Vector2((tx + 0.5f) * tw, (ty + 0.5f) * th);
+                if (!m.OverlapsBlockingTile(center, scale, halfW, halfH))
+                {
+                    return center;
+                }
+            }
+        }
+    }
+
+    return preferred;
 }
 
 sealed class TileMap
