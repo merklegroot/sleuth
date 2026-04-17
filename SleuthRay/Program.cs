@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Xml.Linq;
 using Raylib_cs;
 
@@ -12,6 +11,8 @@ Raylib.InitWindow(screenWidth, screenHeight, "SleuthRay");
 Raylib.SetTargetFPS(60);
 // Continuous polling (not "wait for events"); important for GLFW gamepad/joystick updates on some platforms.
 Raylib.DisableEventWaiting();
+
+Raylib.InitAudioDevice();
 
 (int gamepadMappingsAccepted, string gamepadMappingsDetail) = TryLoadGamepadMappings();
 
@@ -26,6 +27,19 @@ Raylib.SetTextureFilter(wandererTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
 Texture2D gunTexture = Raylib.LoadTexture("assets/weapons/1Revolver01.png");
 Raylib.SetTextureFilter(gunTexture, TextureFilter.TEXTURE_FILTER_POINT);
+
+string gunshotPath = Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "gunshot.wav");
+Sound gunshotSound = default;
+bool gunshotSoundReady = false;
+if (File.Exists(gunshotPath))
+{
+    gunshotSound = Raylib.LoadSound(gunshotPath);
+    gunshotSoundReady = Raylib.IsSoundReady(gunshotSound);
+    if (gunshotSoundReady)
+    {
+        Raylib.SetSoundVolume(gunshotSound, 0.88f);
+    }
+}
 
 const float mapScale = 3f;
 /// <summary>World-space half extents of the player collision box (centered on <see cref="playerWorldPos"/>).</summary>
@@ -438,6 +452,11 @@ while (!Raylib.WindowShouldClose())
         lastShotDir = dir;
         gunFlashTimer = gunFlashDuration;
 
+        if (gunshotSoundReady)
+        {
+            Raylib.PlaySound(gunshotSound);
+        }
+
         Vector2 vel = dir * bulletSpeed;
         bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel));
     }
@@ -615,6 +634,13 @@ while (!Raylib.WindowShouldClose())
 }
 
 map.Unload();
+if (gunshotSoundReady)
+{
+    Raylib.UnloadSound(gunshotSound);
+}
+
+Raylib.CloseAudioDevice();
+
 Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(wandererTexture);
 Raylib.UnloadTexture(characterTexture);
