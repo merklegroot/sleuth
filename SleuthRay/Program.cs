@@ -10,6 +10,8 @@ const string message = "Press ESC to exit.";
 
 Raylib.InitWindow(screenWidth, screenHeight, "SleuthRay");
 Raylib.SetTargetFPS(60);
+// Continuous polling (not "wait for events"); important for GLFW gamepad/joystick updates on some platforms.
+Raylib.DisableEventWaiting();
 
 (int gamepadMappingsAccepted, string gamepadMappingsDetail) = TryLoadGamepadMappings();
 
@@ -88,9 +90,18 @@ const float wandererHealthBarGapAboveSprite = 6f;
 const float wandererHitFlashDuration = 0.35f;
 const float wandererHitBlinkHz = 22f;
 float wandererHitFlashTimer = 0f;
+int frameIndex = 0;
+bool showInputDebugOverlay = false;
 
 while (!Raylib.WindowShouldClose())
 {
+    frameIndex++;
+    Raylib.PollInputEvents();
+    if (Raylib.IsKeyPressed(KeyboardKey.KEY_GRAVE))
+    {
+        showInputDebugOverlay = !showInputDebugOverlay;
+    }
+
     float dt = Raylib.GetFrameTime();
 
     wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
@@ -100,6 +111,9 @@ while (!Raylib.WindowShouldClose())
     if (Raylib.IsKeyDown(KeyboardKey.KEY_S)) keyInput.Y += 1;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_A)) keyInput.X -= 1;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_D)) keyInput.X += 1;
+
+    // Second poll before reading sticks (macOS / Bluetooth: some setups batch HID updates oddly).
+    Raylib.PollInputEvents();
 
     Vector2 stick = Vector2.Zero;
     int gamepad = -1;
@@ -498,17 +512,31 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawCircleV(screen, bulletRadius, Color.YELLOW);
     }
 
-    DrawInputReadbackOverlay(
-        gamepad,
-        stick,
-        keyHeld,
-        keyInput,
-        stickHeld,
-        hasInput,
-        moveDir,
-        moveScale,
-        gamepadMappingsAccepted,
-        gamepadMappingsDetail);
+    if (showInputDebugOverlay)
+    {
+        Raylib.PollInputEvents();
+        float lateGp0Lx = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
+        float lateGp0Ly = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+        float latePickedLx = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_X) : 0f;
+        float latePickedLy = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_Y) : 0f;
+
+        DrawInputReadbackOverlay(
+            gamepad,
+            stick,
+            keyHeld,
+            keyInput,
+            stickHeld,
+            hasInput,
+            moveDir,
+            moveScale,
+            gamepadMappingsAccepted,
+            gamepadMappingsDetail,
+            frameIndex,
+            lateGp0Lx,
+            lateGp0Ly,
+            latePickedLx,
+            latePickedLy);
+    }
 
     Raylib.EndDrawing();
 
@@ -537,7 +565,12 @@ static void DrawInputReadbackOverlay(
     Vector2 moveDir,
     float moveScale,
     int gamepadMappingsAccepted,
-    string gamepadMappingsDetail)
+    string gamepadMappingsDetail,
+    int frameIndex,
+    float lateGp0Lx,
+    float lateGp0Ly,
+    float latePickedLx,
+    float latePickedLy)
 {
     const int pad = 6;
     const int font = 10;
@@ -556,10 +589,19 @@ static void DrawInputReadbackOverlay(
     }
 
     // Fixed panel; enough lines for header + mappings + avail + keys + gp[0] API samples + 4 gamepads * 2 + summary.
-    Raylib.DrawRectangle(pad - 3, pad - 3, 560, 378, new Color(0, 0, 0, 170));
+    Raylib.DrawRectangle(pad - 3, pad - 3, 560, 418, new Color(0, 0, 0, 170));
 
     Row("INPUT READBACK (gamepad slots + keys)", label);
+    Row(
+        $"frame={frameIndex}  focused={Raylib.IsWindowFocused()}  minimized={Raylib.IsWindowMinimized()}  hidden={Raylib.IsWindowHidden()}",
+        Raylib.IsWindowFocused() ? text : new Color(255, 200, 120, 255));
+    Row(
+        "PollInputEvents: start of frame + before stick read + after BeginDrawing (see late LX/LY below)",
+        label);
     Row($"SetGamepadMappings accepted={gamepadMappingsAccepted}  {gamepadMappingsDetail}", label);
+    Row(
+        $"POST BeginDrawing+Poll  gp[0] LX={lateGp0Lx:F3} LY={lateGp0Ly:F3}   pickedGp LX={latePickedLx:F3} LY={latePickedLy:F3}",
+        label);
     Row(
         "IsGamepadAvailable: "
         + $"0={Raylib.IsGamepadAvailable(0)} 1={Raylib.IsGamepadAvailable(1)} 2={Raylib.IsGamepadAvailable(2)} "
