@@ -82,7 +82,8 @@ int wandererHealth = wandererMaxHealth;
 const float wandererHealthBarPadX = 4f;
 const float wandererHealthBarHeight = 5f;
 const float wandererHealthBarGapAboveSprite = 6f;
-const float wandererHitFlashDuration = 0.20f;
+const float wandererHitFlashDuration = 0.35f;
+const float wandererHitBlinkHz = 22f;
 float wandererHitFlashTimer = 0f;
 
 while (!Raylib.WindowShouldClose())
@@ -382,13 +383,12 @@ while (!Raylib.WindowShouldClose())
         Color wanderTint = Color.WHITE;
         if (wandererHitFlashTimer > 0f)
         {
-            float t = Math.Clamp(wandererHitFlashTimer / wandererHitFlashDuration, 0f, 1f);
-            // Strong red tint: keep red at full, push green/blue way down, then fade back to white.
-            const byte targetG = 25;
-            const byte targetB = 25;
-            byte g = (byte)(255 + (targetG - 255) * t);
-            byte b = (byte)(255 + (targetB - 255) * t);
-            wanderTint = new Color((byte)255, g, b, (byte)255);
+            // Blink red/normal several times while the timer is active.
+            bool on = ((int)(wandererHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+            if (on)
+            {
+                wanderTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+            }
         }
 
         Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, wanderTint);
