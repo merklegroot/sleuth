@@ -56,7 +56,11 @@ const float aimReticleLineThick = 2f;
 const float cameraFollow = 14f; // higher = tighter camera
 Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
 Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
+Vector2 playerSpawnWorldPos = playerWorldPos;
 Vector2 playerVel = Vector2.Zero;
+const int playerMaxHealth = 8;
+int playerHealth = playerMaxHealth;
+float playerHitFlashTimer = 0f;
 Vector2 cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
 bool prevHasInput = false;
 bool prevSpaceHeld = false;
@@ -87,7 +91,7 @@ const float Rad2Deg = 180f / MathF.PI;
 /// <summary>Along <see cref="lastShotDir"/> after half the scaled gun width so the pivot sits past the torso, not inside it.</summary>
 const float gunPivotAlongAimExtraPx = 14f;
 const float gunFlashDuration = 0.22f;
-var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
+var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer)>(48);
 float gunFlashTimer = 0f;
 Vector2 lastShotDir = new(0f, 1f);
 
@@ -115,6 +119,12 @@ const float wandererHealthBarGapAboveSprite = 6f;
 const float wandererHitFlashDuration = 0.35f;
 const float wandererHitBlinkHz = 22f;
 float wandererHitFlashTimer = 0f;
+float wandererShootCooldown = 1.8f;
+const float wandererBulletSpeed = 290f;
+const float wandererShootIntervalMin = 1.5f;
+const float wandererShootIntervalMax = 3.4f;
+const float wandererShootRetryWhenBlind = 0.45f;
+const float wandererShootMaxRange = 540f;
 int frameIndex = 0;
 bool showInputDebugOverlay = false;
 
@@ -133,6 +143,7 @@ while (!Raylib.WindowShouldClose())
     float dt = Raylib.GetFrameTime();
 
     wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
+    playerHitFlashTimer = MathF.Max(0f, playerHitFlashTimer - dt);
 
     Vector2 keyInput = Vector2.Zero;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) keyInput.Y -= 1;
@@ -324,6 +335,7 @@ while (!Raylib.WindowShouldClose())
             wandererHealth = wandererMaxHealth;
             wandererHitFlashTimer = 0f;
             wandererAlive = true;
+            wandererShootCooldown = 1.2f + Random.Shared.NextSingle() * 1.6f;
         }
     }
 
@@ -379,6 +391,31 @@ while (!Raylib.WindowShouldClose())
         {
             wandererAnimTimer -= wandererAnimFrameSeconds;
             wandererCycleIndex = (wandererCycleIndex + 1) % frameCycle.Length;
+        }
+    }
+
+    wandererShootCooldown -= dt;
+    if (wandererShootCooldown <= 0f)
+    {
+        Vector2 toPlayer = playerWorldPos - wandererWorldPos;
+        float distSq = toPlayer.LengthSquared();
+        if (distSq > 40f * 40f
+            && distSq <= wandererShootMaxRange * wandererShootMaxRange
+            && LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale))
+        {
+            float dist = MathF.Sqrt(distSq);
+            Vector2 nd = toPlayer / dist;
+            bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false));
+            wandererShootCooldown = wandererShootIntervalMin
+                + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
+            if (gunshotSoundReady)
+            {
+                Raylib.PlaySound(gunshotSound);
+            }
+        }
+        else
+        {
+            wandererShootCooldown = wandererShootRetryWhenBlind;
         }
     }
 
@@ -463,19 +500,19 @@ while (!Raylib.WindowShouldClose())
         }
 
         Vector2 vel = dir * bulletSpeed;
-        bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel));
+        bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true));
     }
 
     for (int i = bullets.Count - 1; i >= 0; i--)
     {
-        (Vector2 pos, Vector2 vel) = bullets[i];
+        (Vector2 pos, Vector2 vel, bool fromPlayer) = bullets[i];
         Vector2 newPos = pos + vel * dt;
         if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
             || map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
         {
             bullets.RemoveAt(i);
         }
-        else if (wandererAlive && CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
+        else if (fromPlayer && wandererAlive && CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
         {
             bullets.RemoveAt(i);
             wandererHitFlashTimer = wandererHitFlashDuration;
@@ -487,9 +524,23 @@ while (!Raylib.WindowShouldClose())
                 wandererRespawnTimer = wandererRespawnDelay;
             }
         }
+        else if (!fromPlayer && CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
+        {
+            bullets.RemoveAt(i);
+            playerHitFlashTimer = wandererHitFlashDuration;
+            playerHealth--;
+            if (playerHealth <= 0)
+            {
+                playerWorldPos = playerSpawnWorldPos;
+                playerVel = Vector2.Zero;
+                playerHealth = playerMaxHealth;
+                playerHitFlashTimer = 0f;
+                bullets.Clear();
+            }
+        }
         else
         {
-            bullets[i] = (newPos, vel);
+            bullets[i] = (newPos, vel, fromPlayer);
         }
     }
 
@@ -552,7 +603,31 @@ while (!Raylib.WindowShouldClose())
     float charY = playerScreenPos.Y - destH / 2f;
     var dest = new Rectangle(charX, charY, destW, destH);
 
-    Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
+    Color playerTint = Color.WHITE;
+    if (playerHitFlashTimer > 0f)
+    {
+        bool on = ((int)(playerHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+        if (on)
+        {
+            playerTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+        }
+    }
+
+    Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
+
+    float pBarW = destW - wandererHealthBarPadX * 2f;
+    float pBarLeft = playerScreenPos.X - pBarW * 0.5f;
+    float pBarTop = charY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
+    var pBarBg = new Rectangle(pBarLeft, pBarTop, pBarW, wandererHealthBarHeight);
+    Raylib.DrawRectangleRec(pBarBg, new Color((byte)12, (byte)22, (byte)48, (byte)255));
+    float pHpFrac = playerHealth / (float)playerMaxHealth;
+    if (pHpFrac > 0f)
+    {
+        var pBarFill = new Rectangle(pBarLeft, pBarTop, pBarW * pHpFrac, wandererHealthBarHeight);
+        Raylib.DrawRectangleRec(pBarFill, new Color((byte)70, (byte)150, (byte)235, (byte)255));
+    }
+
+    Raylib.DrawRectangleLinesEx(pBarBg, 1f, new Color((byte)20, (byte)28, (byte)48, (byte)255));
 
     DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
 
@@ -583,7 +658,8 @@ while (!Raylib.WindowShouldClose())
     for (int i = 0; i < bullets.Count; i++)
     {
         Vector2 screen = cameraOffsetSmoothed + bullets[i].Pos;
-        Raylib.DrawCircleV(screen, bulletRadius, Color.YELLOW);
+        Color bCol = bullets[i].FromPlayer ? Color.YELLOW : new Color((byte)255, (byte)140, (byte)60, (byte)255);
+        Raylib.DrawCircleV(screen, bulletRadius, bCol);
     }
 
     if (showInputDebugOverlay)
@@ -928,6 +1004,37 @@ static Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, floa
     }
 
     return preferred;
+}
+
+/// <summary>Ray from NPC to player: no blocking tile between them (same probe size as bullets).</summary>
+static bool LineOfSightClear(TileMap map, Vector2 from, Vector2 to, float mapScale)
+{
+    Vector2 d = to - from;
+    float len = d.Length();
+    if (len < 24f)
+    {
+        return true;
+    }
+
+    Vector2 dir = d / len;
+    const float step = 14f;
+    float start = 20f;
+    float end = len - 24f;
+    if (end <= start)
+    {
+        return true;
+    }
+
+    for (float s = start; s < end; s += step)
+    {
+        Vector2 p = from + dir * s;
+        if (map.OverlapsBlockingTile(p, mapScale, bulletHitHalf, bulletHitHalf))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH)
