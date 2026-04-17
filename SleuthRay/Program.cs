@@ -51,6 +51,8 @@ const float bulletRadius = 2.5f;
 /// <summary>Revolver art faces +X; rotation aligns barrel with aim.</summary>
 const float gunSpriteScale = 2.5f;
 const float Rad2Deg = 180f / MathF.PI;
+/// <summary>Along <see cref="lastShotDir"/> after half the scaled gun width so the pivot sits past the torso, not inside it.</summary>
+const float gunPivotAlongAimExtraPx = 14f;
 const float gunFlashDuration = 0.22f;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 float gunFlashTimer = 0f;
@@ -272,10 +274,11 @@ while (!Raylib.WindowShouldClose())
 
         float gw = tw * gunSpriteScale;
         float gh = th * gunSpriteScale;
-        // Raylib: dest.X/Y is the on-screen pivot (rotation center), not the quad top-left; at 0° rotation
-        // top-left = dest - origin. So dest = player center places origin (here, quad center) on the player.
+        // Pivot follows aim; offset by ~half gun length + margin so the sprite is not stacked on the player center.
+        float alongAim = gw * 0.5f + gunPivotAlongAimExtraPx;
+        Vector2 gunPivot = playerScreenPos + lastShotDir * alongAim;
         var gOrigin = new Vector2(gw * 0.5f, gh * 0.5f);
-        var gDest = new Rectangle(playerScreenPos.X, playerScreenPos.Y, gw, gh);
+        var gDest = new Rectangle(gunPivot.X, gunPivot.Y, gw, gh);
         Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, rotDeg, Color.WHITE);
     }
 
