@@ -41,6 +41,9 @@ Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Heig
 Vector2 playerVel = Vector2.Zero;
 Vector2 cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
 bool prevHasInput = false;
+bool prevSpaceHeld = false;
+bool prevGraveHeld = false;
+bool prevEscapeHeld = false;
 
 const int frameWidth = 16;
 const int frameHeight = 20;
@@ -97,7 +100,10 @@ while (!Raylib.WindowShouldClose())
 {
     frameIndex++;
     Raylib.PollInputEvents();
-    if (Raylib.IsKeyPressed(KeyboardKey.KEY_GRAVE))
+    // Rising edges from IsKeyDown (held state survives multiple PollInputEvents per frame;
+    // IsKeyPressed can be cleared before we run shooting / overlay / quit logic).
+    bool graveHeld = Raylib.IsKeyDown(KeyboardKey.KEY_GRAVE);
+    if (graveHeld && !prevGraveHeld)
     {
         showInputDebugOverlay = !showInputDebugOverlay;
     }
@@ -363,7 +369,20 @@ while (!Raylib.WindowShouldClose())
 
     gunFlashTimer = MathF.Max(0f, gunFlashTimer - dt);
 
-    if (Raylib.IsKeyPressed(KeyboardKey.KEY_SPACE))
+    bool spaceHeld = Raylib.IsKeyDown(KeyboardKey.KEY_SPACE);
+    bool padFirePressed = false;
+    for (int g = 0; g < 4; g++)
+    {
+        if (Raylib.IsGamepadAvailable(g)
+            && Raylib.IsGamepadButtonPressed(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_DOWN))
+        {
+            padFirePressed = true;
+            break;
+        }
+    }
+
+    bool firePressed = (spaceHeld && !prevSpaceHeld) || padFirePressed;
+    if (firePressed)
     {
         Vector2 dir;
         if (hasInput)
@@ -540,12 +559,16 @@ while (!Raylib.WindowShouldClose())
 
     Raylib.EndDrawing();
 
-    if (Raylib.IsKeyPressed(KeyboardKey.KEY_ESCAPE))
+    bool escapeHeld = Raylib.IsKeyDown(KeyboardKey.KEY_ESCAPE);
+    if (escapeHeld && !prevEscapeHeld)
     {
         break;
     }
 
     prevHasInput = hasInput;
+    prevSpaceHeld = spaceHeld;
+    prevGraveHeld = graveHeld;
+    prevEscapeHeld = escapeHeld;
 }
 
 map.Unload();
