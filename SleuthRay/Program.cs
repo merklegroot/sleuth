@@ -50,12 +50,6 @@ const float bulletHitHalf = 1.5f;
 const float bulletRadius = 2.5f;
 /// <summary>Revolver art faces +X; rotation aligns barrel with aim.</summary>
 const float gunSpriteScale = 2.5f;
-/// <summary>Grip sits this many pixels "behind" the shot line from the character center (toward the body).</summary>
-const float gripBehindAimPx = 10f;
-/// <summary>Horizontal pivot: left side of sprite ≈ grip (barrel extends to the right in texture space).</summary>
-const float gunGripFracX = 0.22f;
-/// <summary>Vertical pivot: middle of grip in the art.</summary>
-const float gunGripFracY = 0.52f;
 const float gunFlashDuration = 0.22f;
 var bullets = new List<(Vector2 Pos, Vector2 Vel)>(32);
 float gunFlashTimer = 0f;
@@ -267,20 +261,17 @@ while (!Raylib.WindowShouldClose())
     {
         // Match 4-way character facing: dominant axis (like walk rows), left = mirrored sprite, no free rotation.
         int gunRow = FacingRowFromDir(lastShotDir);
-        Vector2 facing = CardinalUnitFromRow(gunRow);
 
         float tw = gunTexture.Width;
         float th = gunTexture.Height;
         Rectangle gSrc;
         float rotDeg;
-        bool mirrorSrc = false;
 
         switch (gunRow)
         {
             case 1: // left — mirror (same idea as a flipped walk frame), no extra rotation
                 gSrc = new Rectangle(tw, 0, -tw, th);
                 rotDeg = 0f;
-                mirrorSrc = true;
                 break;
             case 0: // down — barrel was +X in art, rotate +90° (clockwise) to point +Y
                 gSrc = new Rectangle(0, 0, tw, th);
@@ -298,10 +289,10 @@ while (!Raylib.WindowShouldClose())
 
         float gw = tw * gunSpriteScale;
         float gh = th * gunSpriteScale;
-        Vector2 gripWorld = playerScreenPos - facing * gripBehindAimPx;
-        float ox = mirrorSrc ? gw * (1f - gunGripFracX) : gw * gunGripFracX;
-        var gOrigin = new Vector2(ox, gh * gunGripFracY);
-        var gDest = new Rectangle(gripWorld.X - gOrigin.X, gripWorld.Y - gOrigin.Y, gw, gh);
+        // Raylib: dest.X/Y is the on-screen pivot (rotation center), not the quad top-left; at 0° rotation
+        // top-left = dest - origin. So dest = player center places origin (here, quad center) on the player.
+        var gOrigin = new Vector2(gw * 0.5f, gh * 0.5f);
+        var gDest = new Rectangle(playerScreenPos.X, playerScreenPos.Y, gw, gh);
         Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, rotDeg, Color.WHITE);
     }
 
@@ -343,15 +334,6 @@ static int FacingRowFromDir(Vector2 d)
 
     return d.Y < 0f ? 3 : 0;
 }
-
-static Vector2 CardinalUnitFromRow(int row) => row switch
-{
-    0 => new Vector2(0f, 1f),
-    1 => new Vector2(-1f, 0f),
-    2 => new Vector2(1f, 0f),
-    3 => new Vector2(0f, -1f),
-    _ => new Vector2(0f, 1f)
-};
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
 {
