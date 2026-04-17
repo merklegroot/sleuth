@@ -74,6 +74,9 @@ const float wandererAccel = 1600f;
 const float wandererTurnMin = 1.1f;
 const float wandererTurnMax = 3.2f;
 const float wandererAnimFrameSeconds = 0.2f;
+bool wandererAlive = true;
+float wandererRespawnTimer = 0f;
+const float wandererRespawnDelay = 2.8f;
 
 while (!Raylib.WindowShouldClose())
 {
@@ -200,7 +203,25 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
-    // Wanderer NPC: pick a new random 8-way heading every few seconds; slide on walls like the player.
+    // Wanderer NPC
+    if (!wandererAlive)
+    {
+        wandererRespawnTimer -= dt;
+        if (wandererRespawnTimer <= 0f)
+        {
+            float ang = Random.Shared.NextSingle() * MathF.Tau;
+            Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 140f;
+            wandererWorldPos = FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+            wandererVel = Vector2.Zero;
+            wandererWanderDir = new Vector2(1f, 0f);
+            wandererTurnTimer = 0f;
+            wandererAlive = true;
+        }
+    }
+
+    if (wandererAlive)
+    {
+    // Pick a new random 8-way heading every few seconds; slide on walls like the player.
     wandererTurnTimer -= dt;
     if (wandererTurnTimer <= 0f)
     {
@@ -253,6 +274,8 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
+    } // wandererAlive update block
+
     // Camera follow (used for map + bullets this frame).
     Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
     float camT = 1f - MathF.Exp(-cameraFollow * dt);
@@ -300,6 +323,13 @@ while (!Raylib.WindowShouldClose())
         {
             bullets.RemoveAt(i);
         }
+        else if (wandererAlive && CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
+        {
+            bullets.RemoveAt(i);
+            wandererAlive = false;
+            wandererVel = Vector2.Zero;
+            wandererRespawnTimer = wandererRespawnDelay;
+        }
         else
         {
             bullets[i] = (newPos, vel);
@@ -317,10 +347,6 @@ while (!Raylib.WindowShouldClose())
     int textY = screenHeight / 2 + 40;
     Raylib.DrawText(message, textX, textY, 24, Color.RAYWHITE);
 
-    int wanderFrame = frameCycle[wandererCycleIndex];
-    var wanderSrc = new Rectangle(wanderFrame * frameWidth, wandererRow * frameHeight, frameWidth, frameHeight);
-    Vector2 wanderScreen = cameraOffsetSmoothed + wandererWorldPos;
-
     int currentFrame = frameCycle[cycleIndex];
     var src = new Rectangle(currentFrame * frameWidth, currentRow * frameHeight, frameWidth, frameHeight);
 
@@ -328,10 +354,17 @@ while (!Raylib.WindowShouldClose())
     const float scale = 3f;
     float destW = frameWidth * scale;
     float destH = frameHeight * scale;
-    float wanderCharX = wanderScreen.X - destW / 2f;
-    float wanderCharY = wanderScreen.Y - destH / 2f;
-    var wanderDest = new Rectangle(wanderCharX, wanderCharY, destW, destH);
-    Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, Color.WHITE);
+
+    if (wandererAlive)
+    {
+        int wanderFrame = frameCycle[wandererCycleIndex];
+        var wanderSrc = new Rectangle(wanderFrame * frameWidth, wandererRow * frameHeight, frameWidth, frameHeight);
+        Vector2 wanderScreen = cameraOffsetSmoothed + wandererWorldPos;
+        float wanderCharX = wanderScreen.X - destW / 2f;
+        float wanderCharY = wanderScreen.Y - destH / 2f;
+        var wanderDest = new Rectangle(wanderCharX, wanderCharY, destW, destH);
+        Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, Color.WHITE);
+    }
 
     float charX = playerScreenPos.X - destW / 2f;
     float charY = playerScreenPos.Y - destH / 2f;
@@ -441,6 +474,15 @@ static Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, floa
     }
 
     return preferred;
+}
+
+static bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH)
+{
+    float nx = Math.Clamp(circleCenter.X, rectCenter.X - halfW, rectCenter.X + halfW);
+    float ny = Math.Clamp(circleCenter.Y, rectCenter.Y - halfH, rectCenter.Y + halfH);
+    float dx = circleCenter.X - nx;
+    float dy = circleCenter.Y - ny;
+    return dx * dx + dy * dy <= radius * radius;
 }
 
 sealed class TileMap
