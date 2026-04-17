@@ -125,8 +125,19 @@ const float wandererShootIntervalMin = 1.5f;
 const float wandererShootIntervalMax = 3.4f;
 const float wandererShootRetryWhenBlind = 0.45f;
 const float wandererShootMaxRange = 540f;
+string wandererSpeech = "";
+float wandererSpeechTimer = 0f;
+float wandererChatterCooldown = 0.9f;
+const float wandererSpeechShowSeconds = 2.85f;
+const int wandererSpeechFontPx = 14;
+const float wandererSpeechMaxContentWidth = 236f;
+const float wandererSpeechBubblePad = 10f;
 int frameIndex = 0;
 bool showInputDebugOverlay = false;
+
+wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
+wandererSpeechTimer = wandererSpeechShowSeconds;
+wandererChatterCooldown = 4.5f + Random.Shared.NextSingle() * 3f;
 
 while (!Raylib.WindowShouldClose())
 {
@@ -144,6 +155,20 @@ while (!Raylib.WindowShouldClose())
 
     wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
     playerHitFlashTimer = MathF.Max(0f, playerHitFlashTimer - dt);
+    wandererSpeechTimer = MathF.Max(0f, wandererSpeechTimer - dt);
+    if (wandererAlive)
+    {
+        if (wandererSpeechTimer <= 0f)
+        {
+            wandererChatterCooldown -= dt;
+            if (wandererChatterCooldown <= 0f)
+            {
+                wandererSpeech = WandererTalk.Pick(WandererTalk.Idle);
+                wandererSpeechTimer = wandererSpeechShowSeconds;
+                wandererChatterCooldown = 4.2f + Random.Shared.NextSingle() * 7.5f;
+            }
+        }
+    }
 
     Vector2 keyInput = Vector2.Zero;
     if (Raylib.IsKeyDown(KeyboardKey.KEY_W)) keyInput.Y -= 1;
@@ -336,6 +361,9 @@ while (!Raylib.WindowShouldClose())
             wandererHitFlashTimer = 0f;
             wandererAlive = true;
             wandererShootCooldown = 1.2f + Random.Shared.NextSingle() * 1.6f;
+            wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
+            wandererSpeechTimer = wandererSpeechShowSeconds;
+            wandererChatterCooldown = wandererSpeechShowSeconds + 1.8f + Random.Shared.NextSingle() * 2f;
         }
     }
 
@@ -412,6 +440,10 @@ while (!Raylib.WindowShouldClose())
             {
                 Raylib.PlaySound(gunshotSound);
             }
+
+            wandererSpeech = WandererTalk.Pick(WandererTalk.Shoot);
+            wandererSpeechTimer = wandererSpeechShowSeconds;
+            wandererChatterCooldown = 2.2f + Random.Shared.NextSingle() * 3.5f;
         }
         else
         {
@@ -516,12 +548,16 @@ while (!Raylib.WindowShouldClose())
         {
             bullets.RemoveAt(i);
             wandererHitFlashTimer = wandererHitFlashDuration;
+            wandererSpeech = WandererTalk.Pick(WandererTalk.Hurt);
+            wandererSpeechTimer = wandererSpeechShowSeconds;
             wandererHealth--;
             if (wandererHealth <= 0)
             {
                 wandererAlive = false;
                 wandererVel = Vector2.Zero;
                 wandererRespawnTimer = wandererRespawnDelay;
+                wandererSpeech = "";
+                wandererSpeechTimer = 0f;
             }
         }
         else if (!fromPlayer && CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
@@ -597,6 +633,17 @@ while (!Raylib.WindowShouldClose())
         }
 
         Raylib.DrawRectangleLinesEx(barBg, 1f, new Color(20, 20, 20, 255));
+
+        if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
+        {
+            DrawWandererSpeechBubble(
+                wanderScreen.X,
+                barTop,
+                wandererSpeech,
+                wandererSpeechFontPx,
+                wandererSpeechMaxContentWidth,
+                wandererSpeechBubblePad);
+        }
     }
 
     float charX = playerScreenPos.X - destW / 2f;
@@ -728,6 +775,80 @@ Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(wandererTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+static List<string> WrapWandererSpeechLines(string text, int fontSize, float maxWidth)
+{
+    var result = new List<string>();
+    if (string.IsNullOrWhiteSpace(text))
+    {
+        return result;
+    }
+
+    string[] words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    if (words.Length == 0)
+    {
+        return result;
+    }
+
+    string line = words[0];
+    for (int i = 1; i < words.Length; i++)
+    {
+        string trial = line + " " + words[i];
+        if (Raylib.MeasureText(trial, fontSize) <= maxWidth)
+        {
+            line = trial;
+        }
+        else
+        {
+            result.Add(line);
+            line = words[i];
+        }
+    }
+
+    result.Add(line);
+    return result;
+}
+
+/// <summary>Rounded speech bubble above the wanderer's health bar (screen space).</summary>
+static void DrawWandererSpeechBubble(
+    float centerX,
+    float barTopY,
+    string text,
+    int fontSize,
+    float maxContentWidth,
+    float pad)
+{
+    List<string> lines = WrapWandererSpeechLines(text, fontSize, maxContentWidth);
+    if (lines.Count == 0)
+    {
+        return;
+    }
+
+    float lineStep = fontSize + 4;
+    float maxLinePx = 1f;
+    foreach (string ln in lines)
+    {
+        maxLinePx = MathF.Max(maxLinePx, Raylib.MeasureText(ln, fontSize));
+    }
+
+    float bubbleW = maxLinePx + pad * 2f;
+    float bubbleH = lines.Count * lineStep + pad * 2f;
+    float left = centerX - bubbleW * 0.5f;
+    left = Math.Clamp(left, 6f, screenWidth - bubbleW - 6f);
+    float top = barTopY - bubbleH - 5f;
+    top = Math.Clamp(top, 6f, screenHeight - bubbleH - 6f);
+    var rec = new Rectangle(left, top, bubbleW, bubbleH);
+    Raylib.DrawRectangleRounded(rec, 0.22f, 10, new Color((byte)248, (byte)240, (byte)220, (byte)188));
+    Raylib.DrawRectangleRoundedLines(rec, 0.22f, 10, 2, new Color((byte)42, (byte)36, (byte)28, (byte)210));
+
+    float ty = top + pad;
+    foreach (string ln in lines)
+    {
+        float tw = Raylib.MeasureText(ln, fontSize);
+        Raylib.DrawText(ln, (int)(left + (bubbleW - tw) * 0.5f), (int)ty, fontSize, new Color((byte)28, (byte)24, (byte)20, (byte)255));
+        ty += lineStep;
+    }
+}
 
 /// <summary>Shows raw reads from keyboard and every gamepad slot so we can see which index carries the stick.</summary>
 static void DrawInputReadbackOverlay(
@@ -1351,4 +1472,57 @@ sealed class TileMap
 
         return gids;
     }
+}
+
+file static class WandererTalk
+{
+    public static readonly string[] Idle =
+    [
+        "This case smells fishier than yesterday's chowder.",
+        "I've got my eye on you, sleuth.",
+        "The streets tell stories, buddy.",
+        "Mind the ricochet, genius.",
+        "You walk like guilt with legs.",
+        "I didn't hoof it twelve blocks for a picnic.",
+        "Fog's rolling in. Good.",
+        "Somewhere a clue is sweating.",
+        "Save the monologue for the judge.",
+        "I solve crimes between meals.",
+    ];
+
+    public static readonly string[] Shoot =
+    [
+        "Eat lead, gumshoe!",
+        "Hands where I can see 'em!",
+        "Think fast!",
+        "Order in the court!",
+        "Freeze! ...ish.",
+        "Courtesy of the neighborhood watch.",
+        "That's a warning shot. The next one's cheaper.",
+        "Hold still, will ya?",
+    ];
+
+    public static readonly string[] Hurt =
+    [
+        "Hey! That's brutality!",
+        "Cheap shot!",
+        "I'm walkin' here!",
+        "You'll pay for that!",
+        "Ow! My dramatic tension!",
+        "Rude.",
+        "That stings worse than the truth!",
+        "Bad form, detective!",
+    ];
+
+    public static readonly string[] Spawn =
+    [
+        "Back on the beat.",
+        "Didja miss me?",
+        "The city never sleeps. Neither do I.",
+        "Another day, another alley.",
+        "Keep it clean, partner.",
+        "Reporting for duty and sass.",
+    ];
+
+    public static string Pick(string[] lines) => lines[Random.Shared.Next(lines.Length)];
 }
