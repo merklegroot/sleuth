@@ -262,8 +262,13 @@ while (!Raylib.WindowShouldClose())
     {
         float tw = gunTexture.Width;
         float th = gunTexture.Height;
-        var gSrc = new Rectangle(0, 0, tw, th);
-        float rotDeg = MathF.Atan2(lastShotDir.Y, lastShotDir.X) * Rad2Deg;
+        // Mirror when aiming into the left half-plane (like the 4-way character), but keep full atan2
+        // range via a reflected X so diagonals stay correct and the sprite is never upside-down.
+        bool mirrorGun = lastShotDir.X < 0f;
+        var gSrc = mirrorGun ? new Rectangle(tw, 0f, -tw, th) : new Rectangle(0f, 0f, tw, th);
+        float ax = mirrorGun ? -lastShotDir.X : lastShotDir.X;
+        float ay = mirrorGun ? -lastShotDir.Y : lastShotDir.Y;
+        float rotDeg = MathF.Atan2(ay, ax) * Rad2Deg;
 
         float gw = tw * gunSpriteScale;
         float gh = th * gunSpriteScale;
