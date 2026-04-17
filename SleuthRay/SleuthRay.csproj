@@ -11,4 +11,10 @@
     <PackageReference Include="Raylib-cs" Version="5.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="assets\gamecontrollerdb_xbox_mac.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

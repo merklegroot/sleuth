@@ -11,6 +11,8 @@ const string message = "Press ESC to exit.";
 Raylib.InitWindow(screenWidth, screenHeight, "SleuthRay");
 Raylib.SetTargetFPS(60);
 
+(int gamepadMappingsAccepted, string gamepadMappingsDetail) = TryLoadGamepadMappings();
+
 TileMap map = TileMap.LoadFromTmx(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../tiled/map.tmx")));
 Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
@@ -101,19 +103,37 @@ while (!Raylib.WindowShouldClose())
 
     Vector2 stick = Vector2.Zero;
     int gamepad = -1;
+    int firstAvailGamepad = -1;
+    Vector2 firstAvailStick = Vector2.Zero;
+    float pickMagSq = stickDeadZone * stickDeadZone;
     for (int g = 0; g < 4; g++)
     {
-        if (Raylib.IsGamepadAvailable(g))
+        if (!Raylib.IsGamepadAvailable(g))
         {
+            continue;
+        }
+
+        float sx = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
+        float sy = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+        if (firstAvailGamepad < 0)
+        {
+            firstAvailGamepad = g;
+            firstAvailStick = new Vector2(sx, sy);
+        }
+
+        float magSq = sx * sx + sy * sy;
+        if (magSq > pickMagSq)
+        {
+            pickMagSq = magSq;
             gamepad = g;
-            break;
+            stick = new Vector2(sx, sy);
         }
     }
 
-    if (gamepad >= 0)
+    if (gamepad < 0 && firstAvailGamepad >= 0)
     {
-        stick.X = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
-        stick.Y = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+        gamepad = firstAvailGamepad;
+        stick = firstAvailStick;
     }
 
     bool keyHeld = keyInput != Vector2.Zero;
@@ -478,7 +498,17 @@ while (!Raylib.WindowShouldClose())
         Raylib.DrawCircleV(screen, bulletRadius, Color.YELLOW);
     }
 
-    DrawInputReadbackOverlay(gamepad, stick, keyHeld, keyInput, stickHeld, hasInput, moveDir, moveScale);
+    DrawInputReadbackOverlay(
+        gamepad,
+        stick,
+        keyHeld,
+        keyInput,
+        stickHeld,
+        hasInput,
+        moveDir,
+        moveScale,
+        gamepadMappingsAccepted,
+        gamepadMappingsDetail);
 
     Raylib.EndDrawing();
 
@@ -505,7 +535,9 @@ static void DrawInputReadbackOverlay(
     bool stickHeld,
     bool hasInput,
     Vector2 moveDir,
-    float moveScale)
+    float moveScale,
+    int gamepadMappingsAccepted,
+    string gamepadMappingsDetail)
 {
     const int pad = 6;
     const int font = 10;
@@ -523,15 +555,51 @@ static void DrawInputReadbackOverlay(
         line++;
     }
 
-    // Fixed panel; enough lines for header + keys + 4 gamepads * 2 + summary.
-    Raylib.DrawRectangle(pad - 3, pad - 3, 520, 268, new Color(0, 0, 0, 170));
+    // Fixed panel; enough lines for header + mappings + avail + keys + gp[0] API samples + 4 gamepads * 2 + summary.
+    Raylib.DrawRectangle(pad - 3, pad - 3, 560, 378, new Color(0, 0, 0, 170));
 
     Row("INPUT READBACK (gamepad slots + keys)", label);
+    Row($"SetGamepadMappings accepted={gamepadMappingsAccepted}  {gamepadMappingsDetail}", label);
+    Row(
+        "IsGamepadAvailable: "
+        + $"0={Raylib.IsGamepadAvailable(0)} 1={Raylib.IsGamepadAvailable(1)} 2={Raylib.IsGamepadAvailable(2)} "
+        + $"3={Raylib.IsGamepadAvailable(3)} 4={Raylib.IsGamepadAvailable(4)} 5={Raylib.IsGamepadAvailable(5)}",
+        label);
     Row(
         $"keys WASD raw=({keyInput.X:F0},{keyInput.Y:F0}) held={keyHeld}  "
         + $"W={(Raylib.IsKeyDown(KeyboardKey.KEY_W) ? 1 : 0)} A={(Raylib.IsKeyDown(KeyboardKey.KEY_A) ? 1 : 0)} "
         + $"S={(Raylib.IsKeyDown(KeyboardKey.KEY_S) ? 1 : 0)} D={(Raylib.IsKeyDown(KeyboardKey.KEY_D) ? 1 : 0)}",
         text);
+
+    Row("gp[0] API samples (same calls, on-screen)", label);
+    bool g0Avail = Raylib.IsGamepadAvailable(0);
+    Row($"IsGamepadAvailable(0)={g0Avail}", text);
+    string g0Name = g0Avail ? Raylib.GetGamepadName_(0) : "(n/a — slot not available)";
+    if (g0Name.Length > 52)
+    {
+        g0Name = string.Concat(g0Name.AsSpan(0, 49), "...");
+    }
+
+    Row($"GetGamepadName_(0)=\"{g0Name}\"", g0Avail ? text : label);
+    Row(
+        "IsGamepadButtonDown(0,RightFaceDown)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_DOWN)
+        + "  (0,LeftFaceDown)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_DOWN)
+        + "  (0,LeftFaceUp)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_UP),
+        text);
+    Row(
+        "(0,LeftFaceLeft)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_LEFT)
+        + "  (0,LeftFaceRight)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_RIGHT)
+        + "  (0,RightFaceUp)="
+        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_UP),
+        text);
+    float g0Lx = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
+    float g0Ly = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
+    Row($"GetGamepadAxisMovement(0,LEFT_X)={g0Lx:F3}  (0,LEFT_Y)={g0Ly:F3}", text);
 
     for (int g = 0; g < 4; g++)
     {
@@ -558,7 +626,7 @@ static void DrawInputReadbackOverlay(
     }
 
     Row(
-        $"MOVE CODE: firstAvailIdx={movementGamepad} stick=({movementStick.X:F3},{movementStick.Y:F3}) "
+        $"MOVE CODE: pickedGp={movementGamepad} stick=({movementStick.X:F3},{movementStick.Y:F3}) "
         + $"stickHeld={stickHeld} hasInput={hasInput}",
         label);
     Row(
@@ -570,6 +638,48 @@ static void DrawInputReadbackOverlay(
     {
         Row($"last gamepad button pressed (enum value)={lastBtn}", text);
     }
+}
+
+/// <summary>Loads SDL_GameControllerDB-format strings into GLFW via Raylib so macOS Xbox pads get correct axis/button mapping.</summary>
+static (int accepted, string detail) TryLoadGamepadMappings()
+{
+    string baseDir = AppContext.BaseDirectory;
+    string full = Path.Combine(baseDir, "assets", "gamecontrollerdb.txt");
+    string subset = Path.Combine(baseDir, "assets", "gamecontrollerdb_xbox_mac.txt");
+
+    if (File.Exists(full))
+    {
+        string body = FilterGamepadMappingText(File.ReadAllText(full));
+        int n = Raylib.SetGamepadMappings(body);
+        return (n, "assets/gamecontrollerdb.txt");
+    }
+
+    if (File.Exists(subset))
+    {
+        string body = FilterGamepadMappingText(File.ReadAllText(subset));
+        int n = Raylib.SetGamepadMappings(body);
+        return (n, "assets/gamecontrollerdb_xbox_mac.txt");
+    }
+
+    return (0, "no assets/gamecontrollerdb*.txt");
+}
+
+static string FilterGamepadMappingText(string raw)
+{
+    string[] lines = raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+    var kept = new List<string>(lines.Length);
+    foreach (string line in lines)
+    {
+        string t = line.Trim();
+        if (t.Length == 0 || t.StartsWith('#'))
+        {
+            continue;
+        }
+
+        kept.Add(line.TrimEnd());
+    }
+
+    return string.Join('\n', kept);
 }
 
 static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
