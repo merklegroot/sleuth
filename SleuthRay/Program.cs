@@ -1,4 +1,6 @@
 ﻿using System.Numerics;
+using System.Reflection;
+using System.Text.Json;
 using System.Xml.Linq;
 using Raylib_cs;
 
@@ -135,6 +137,7 @@ const float wandererSpeechBubblePad = 10f;
 int frameIndex = 0;
 bool showInputDebugOverlay = false;
 
+WandererTalk.InitFromEmbeddedResource();
 wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
 wandererSpeechTimer = wandererSpeechShowSeconds;
 wandererChatterCooldown = 4.5f + Random.Shared.NextSingle() * 3f;
@@ -1476,53 +1479,62 @@ sealed class TileMap
 
 file static class WandererTalk
 {
-    public static readonly string[] Idle =
-    [
-        "This case smells fishier than yesterday's chowder.",
-        "I've got my eye on you, sleuth.",
-        "The streets tell stories, buddy.",
-        "Mind the ricochet, genius.",
-        "You walk like guilt with legs.",
-        "I didn't hoof it twelve blocks for a picnic.",
-        "Fog's rolling in. Good.",
-        "Somewhere a clue is sweating.",
-        "Save the monologue for the judge.",
-        "I solve crimes between meals.",
-    ];
+    const string EmbeddedResourceName = "wanderer_talk.json";
 
-    public static readonly string[] Shoot =
-    [
-        "Eat lead, gumshoe!",
-        "Hands where I can see 'em!",
-        "Think fast!",
-        "Order in the court!",
-        "Freeze! ...ish.",
-        "Courtesy of the neighborhood watch.",
-        "That's a warning shot. The next one's cheaper.",
-        "Hold still, will ya?",
-    ];
+    public static string[] Idle { get; private set; } = [];
+    public static string[] Shoot { get; private set; } = [];
+    public static string[] Hurt { get; private set; } = [];
+    public static string[] Spawn { get; private set; } = [];
 
-    public static readonly string[] Hurt =
-    [
-        "Hey! That's brutality!",
-        "Cheap shot!",
-        "I'm walkin' here!",
-        "You'll pay for that!",
-        "Ow! My dramatic tension!",
-        "Rude.",
-        "That stings worse than the truth!",
-        "Bad form, detective!",
-    ];
+    public static void InitFromEmbeddedResource()
+    {
+        Assembly asm = Assembly.GetExecutingAssembly();
+        using Stream? stream = asm.GetManifestResourceStream(EmbeddedResourceName);
+        if (stream is null)
+        {
+            string names = string.Join(", ", asm.GetManifestResourceNames());
+            throw new InvalidOperationException(
+                $"Missing embedded resource '{EmbeddedResourceName}'. Manifest names: {names}");
+        }
 
-    public static readonly string[] Spawn =
-    [
-        "Back on the beat.",
-        "Didja miss me?",
-        "The city never sleeps. Neither do I.",
-        "Another day, another alley.",
-        "Keep it clean, partner.",
-        "Reporting for duty and sass.",
-    ];
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        WandererTalkJson? data = JsonSerializer.Deserialize<WandererTalkJson>(stream, options);
+        if (data is null)
+        {
+            throw new InvalidOperationException($"{EmbeddedResourceName}: JSON deserialization returned null.");
+        }
+
+        Idle = RequireLines(data.Idle, nameof(data.Idle));
+        Shoot = RequireLines(data.Shoot, nameof(data.Shoot));
+        Hurt = RequireLines(data.Hurt, nameof(data.Hurt));
+        Spawn = RequireLines(data.Spawn, nameof(data.Spawn));
+    }
+
+    static string[] RequireLines(string[]? lines, string fieldName)
+    {
+        if (lines is null || lines.Length == 0)
+        {
+            throw new InvalidOperationException($"{EmbeddedResourceName}: '{fieldName}' must be a non-empty string array.");
+        }
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i]))
+            {
+                throw new InvalidOperationException($"{EmbeddedResourceName}: '{fieldName}[{i}]' is empty.");
+            }
+        }
+
+        return lines;
+    }
 
     public static string Pick(string[] lines) => lines[Random.Shared.Next(lines.Length)];
+
+    sealed class WandererTalkJson
+    {
+        public string[]? Idle { get; set; }
+        public string[]? Shoot { get; set; }
+        public string[]? Hurt { get; set; }
+        public string[]? Spawn { get; set; }
+    }
 }
