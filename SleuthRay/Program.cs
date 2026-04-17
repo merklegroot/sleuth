@@ -49,6 +49,10 @@ const float moveSpeed = 200f; // world pixels (after scaling) per second
 const float accel = 2200f; // higher = snappier starts/stops
 const float friction = 2000f; // higher = quicker slow-down when no input
 const float stickDeadZone = 0.2f;
+const float aimRightStickDeadZone = 0.22f;
+const float aimReticleDistancePx = 56f;
+const float aimReticleArmPx = 10f;
+const float aimReticleLineThick = 2f;
 const float cameraFollow = 14f; // higher = tighter camera
 Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
 Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
@@ -387,6 +391,29 @@ while (!Raylib.WindowShouldClose())
 
     gunFlashTimer = MathF.Max(0f, gunFlashTimer - dt);
 
+    float aimDzSq = aimRightStickDeadZone * aimRightStickDeadZone;
+    Vector2 aimDir = lastShotDir;
+    if (gamepad >= 0)
+    {
+        float rx = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_RIGHT_X);
+        float ry = Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_RIGHT_Y);
+        Vector2 rStick = new(rx, ry);
+        if (rStick.LengthSquared() > aimDzSq)
+        {
+            aimDir = Vector2.Normalize(rStick);
+        }
+        else
+        {
+            aimDir = DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+        }
+    }
+    else
+    {
+        aimDir = DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+    }
+
+    lastShotDir = aimDir;
+
     bool spaceHeld = Raylib.IsKeyDown(KeyboardKey.KEY_SPACE);
     bool padFirePressed = false;
     bool triggerR2FirePressed = false;
@@ -427,29 +454,7 @@ while (!Raylib.WindowShouldClose())
     bool firePressed = (spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed;
     if (firePressed)
     {
-        Vector2 dir;
-        if (hasInput)
-        {
-            // Diagonal (e.g. W+D) uses the same normalized direction as movement.
-            dir = moveDir;
-        }
-        else if (playerVel.LengthSquared() > 4f)
-        {
-            dir = Vector2.Normalize(playerVel);
-        }
-        else
-        {
-            dir = currentRow switch
-            {
-                0 => new Vector2(0f, 1f),
-                1 => new Vector2(-1f, 0f),
-                2 => new Vector2(1f, 0f),
-                3 => new Vector2(0f, -1f),
-                _ => new Vector2(0f, 1f)
-            };
-        }
-
-        lastShotDir = dir;
+        Vector2 dir = lastShotDir;
         gunFlashTimer = gunFlashDuration;
 
         if (gunshotSoundReady)
@@ -548,6 +553,8 @@ while (!Raylib.WindowShouldClose())
     var dest = new Rectangle(charX, charY, destW, destH);
 
     Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
+
+    DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
 
     if (gunFlashTimer > 0f)
     {
@@ -817,6 +824,44 @@ static string FilterGamepadMappingText(string raw)
 }
 
 /// <summary>Maps GLFW/Raylib trigger axis (often 0..1 or -1..1) to 0..1 pressure for R2/L2-style axes.</summary>
+/// <summary>Keyboard / coasting aim when the right stick is centered or no gamepad.</summary>
+static Vector2 DefaultAimDirFromMovement(bool hasInput, Vector2 moveDir, Vector2 playerVel, int currentRow)
+{
+    if (hasInput)
+    {
+        return moveDir;
+    }
+
+    if (playerVel.LengthSquared() > 4f)
+    {
+        return Vector2.Normalize(playerVel);
+    }
+
+    return currentRow switch
+    {
+        0 => new Vector2(0f, 1f),
+        1 => new Vector2(-1f, 0f),
+        2 => new Vector2(1f, 0f),
+        3 => new Vector2(0f, -1f),
+        _ => new Vector2(0f, 1f)
+    };
+}
+
+static void DrawAimReticle(Vector2 playerScreenCenter, Vector2 aimDir, float distancePx, float armPx, float thick)
+{
+    if (aimDir.LengthSquared() < 1e-6f)
+    {
+        return;
+    }
+
+    Vector2 n = Vector2.Normalize(aimDir);
+    Vector2 c = playerScreenCenter + n * distancePx;
+    Vector2 perp = new(-n.Y, n.X);
+    var col = new Color((byte)255, (byte)255, (byte)230, (byte)255);
+    Raylib.DrawLineEx(c - n * armPx, c + n * armPx, thick, col);
+    Raylib.DrawLineEx(c - perp * armPx, c + perp * armPx, thick, col);
+}
+
 static float TriggerAxisToPressure(float raw)
 {
     if (raw < 0f)
