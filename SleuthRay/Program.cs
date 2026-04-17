@@ -129,10 +129,10 @@ const float wandererShootRetryWhenBlind = 0.45f;
 const float wandererShootMaxRange = 540f;
 string wandererSpeech = "";
 float wandererSpeechTimer = 0f;
-float wandererChatterCooldown = 0.9f;
+float wandererChatterCooldown = 14f;
 const float wandererSpeechShowSeconds = 2.85f;
-const int wandererSpeechFontPx = 14;
-const float wandererSpeechMaxContentWidth = 236f;
+const int wandererSpeechFontPx = 20;
+const float wandererSpeechMaxContentWidth = 280f;
 const float wandererSpeechBubblePad = 10f;
 int frameIndex = 0;
 bool showInputDebugOverlay = false;
@@ -140,7 +140,7 @@ bool showInputDebugOverlay = false;
 WandererTalk.InitFromEmbeddedResource();
 wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
 wandererSpeechTimer = wandererSpeechShowSeconds;
-wandererChatterCooldown = 4.5f + Random.Shared.NextSingle() * 3f;
+wandererChatterCooldown = 18f + Random.Shared.NextSingle() * 12f;
 
 while (!Raylib.WindowShouldClose())
 {
@@ -168,7 +168,7 @@ while (!Raylib.WindowShouldClose())
             {
                 wandererSpeech = WandererTalk.Pick(WandererTalk.Idle);
                 wandererSpeechTimer = wandererSpeechShowSeconds;
-                wandererChatterCooldown = 4.2f + Random.Shared.NextSingle() * 7.5f;
+                wandererChatterCooldown = 16f + Random.Shared.NextSingle() * 22f;
             }
         }
     }
@@ -366,7 +366,7 @@ while (!Raylib.WindowShouldClose())
             wandererShootCooldown = 1.2f + Random.Shared.NextSingle() * 1.6f;
             wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
             wandererSpeechTimer = wandererSpeechShowSeconds;
-            wandererChatterCooldown = wandererSpeechShowSeconds + 1.8f + Random.Shared.NextSingle() * 2f;
+            wandererChatterCooldown = wandererSpeechShowSeconds + 8f + Random.Shared.NextSingle() * 10f;
         }
     }
 
@@ -446,7 +446,7 @@ while (!Raylib.WindowShouldClose())
 
             wandererSpeech = WandererTalk.Pick(WandererTalk.Shoot);
             wandererSpeechTimer = wandererSpeechShowSeconds;
-            wandererChatterCooldown = 2.2f + Random.Shared.NextSingle() * 3.5f;
+            wandererChatterCooldown = 8f + Random.Shared.NextSingle() * 10f;
         }
         else
         {
@@ -561,6 +561,10 @@ while (!Raylib.WindowShouldClose())
                 wandererRespawnTimer = wandererRespawnDelay;
                 wandererSpeech = "";
                 wandererSpeechTimer = 0f;
+            }
+            else
+            {
+                wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
             }
         }
         else if (!fromPlayer && CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
@@ -827,7 +831,7 @@ static void DrawWandererSpeechBubble(
         return;
     }
 
-    float lineStep = fontSize + 4;
+    float lineStep = fontSize + 6;
     float maxLinePx = 1f;
     foreach (string ln in lines)
     {
@@ -845,10 +849,15 @@ static void DrawWandererSpeechBubble(
     Raylib.DrawRectangleRoundedLines(rec, 0.22f, 10, 2, new Color((byte)42, (byte)36, (byte)28, (byte)210));
 
     float ty = top + pad;
+    var ink = new Color((byte)22, (byte)18, (byte)14, (byte)255);
+    var shadow = new Color((byte)8, (byte)6, (byte)5, (byte)175);
     foreach (string ln in lines)
     {
         float tw = Raylib.MeasureText(ln, fontSize);
-        Raylib.DrawText(ln, (int)(left + (bubbleW - tw) * 0.5f), (int)ty, fontSize, new Color((byte)28, (byte)24, (byte)20, (byte)255));
+        int tx = (int)(left + (bubbleW - tw) * 0.5f);
+        int tyi = (int)ty;
+        Raylib.DrawText(ln, tx + 1, tyi + 1, fontSize, shadow);
+        Raylib.DrawText(ln, tx, tyi, fontSize, ink);
         ty += lineStep;
     }
 }

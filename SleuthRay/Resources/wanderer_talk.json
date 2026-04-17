@@ -1,6 +1,8 @@
 {
   "idle": [
-    "I've got my eye on you, and the other one on your alibi.",
+    "I think I heard something.",
+    "I wish people would mind their business...",
+    "Stupid tourists...",
     "The streets are talkin', and they got a mouth on 'em.",
     "Mind the ricochet, genius. I hate dry cleaning blood.",
     "You walk like guilt wearing cheap shoes.",
@@ -10,27 +12,20 @@
     "I solve crimes between cigarettes and bad decisions."
   ],
   "shoot": [
-    "Eat lead, sweetheart!",
-    "Hands up before I redecorate the wallpaper!",
-    "Think fast, or don’t. Your funeral.",
-    "Compliments of the neighborhood… with interest.",
-    "That was your warning shot. The next one’s on the house.",
-    "Hold still. This won’t hurt… much."
+    "I'll get you good!",
+    "Eat lead!",
+    "You messed with the wrong guy!",
+    "Hold still!"
   ],
   "hurt": [
-    "Hey! That’s police brutality… and I ain’t even a cop!",
-    "Cheap shot, ya mook!",
-    "I’m walkin’ here, ya blind torpedo!",
-    "Ow! My dramatic tension!",
-    "That stings worse than a dame’s goodbye.",
-    "Bad form, detective. Real bad form."
+    "Ow!",
+    "Stop it, you jerk!",
+    "I'll get you for that."
   ],
   "spawn": [
-    "Back on the beat, baby.",
-    "Didja miss me? Don’t lie, I can smell it.",
-    "The city never sleeps. Lucky for you, neither do I.",
-    "Another night, another alley full of bad ideas.",
-    "Keep it clean, partner. Or at least wipe your prints.",
-    "Reporting for duty, disrespect, and overtime."
+    "I could use something to eat...",
+    "Mind your business.",
+    "This is my turf, now.",
+    "What a horrible town."
   ]
 }
