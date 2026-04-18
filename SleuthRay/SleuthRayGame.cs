@@ -16,7 +16,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int screenWidth = _options.ScreenWidth;
         int screenHeight = _options.ScreenHeight;
 
-        const string message = "Tab: status & inventory   Esc: exit";
+        const string hintLine1 = "Tab: status & inventory";
+        const string hintLine2 = "Esc: exit";
 
         Raylib.InitWindow(screenWidth, screenHeight, _options.WindowTitle);
         Raylib.SetTargetFPS(60);
@@ -153,15 +154,34 @@ public sealed class SleuthRayGame : ISleuthRayGame
         float agentHitFlashTimer = 0f;
         float agentShootCooldown = 2.2f + Random.Shared.NextSingle() * 1.4f;
 
-        // Cat: 64×64 frames; idle strip is row 13 (1-based) → zero-based row index 12, 8 frames across.
+        // Cat: 64×64 frames; sheet rows are 1-based in art specs (idle = row 13 → index 12), 8 idle frames.
         const int catFrameSize = 64;
         const int catIdleRow = 12;
         const int catIdleFrameCount = 8;
         const float catIdleFrameSeconds = 0.14f;
+        // Sheet rows are 1-based in art specs: walk left = row 5, walk right = row 6.
+        const int catWalkLeftRow = 4;
+        const int catWalkRightRow = 5;
+        const int catWalkFrameCount = 6;
+        const float catWalkFrameSeconds = 0.11f;
         const float catDrawScale = 1f;
+        const float catHitHalfW = 14f;
+        const float catHitHalfH = 12f;
+        const float catWalkSpeed = 50f;
+        const float catLeashRadius = 110f;
+        const float catIdleWaitMin = 1.2f;
+        const float catIdleWaitMax = 3.8f;
+        const float catWalkTimeMin = 0.45f;
+        const float catWalkTimeMax = 1.65f;
         Vector2 catWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH);
-        int catIdleFrameIndex = 0;
-        float catIdleAnimTimer = 0f;
+        Vector2 catHomePos = catWorldPos;
+        bool catIsWalking = false;
+        float catBehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f;
+        int catWalkFacingSign = 1;
+        float catWalkTimeLeft = 0f;
+        int catFrameIndex = 0;
+        float catAnimTimer = 0f;
+        int catDrawRow = catIdleRow;
 
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
@@ -192,13 +212,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             float dt = Raylib.GetFrameTime();
-
-            catIdleAnimTimer += dt;
-            while (catIdleAnimTimer >= catIdleFrameSeconds)
-            {
-                catIdleAnimTimer -= catIdleFrameSeconds;
-                catIdleFrameIndex = (catIdleFrameIndex + 1) % catIdleFrameCount;
-            }
 
             bool tabHeld = Raylib.IsKeyDown(KeyboardKey.KEY_TAB);
             // IsKeyPressed is cleared by extra PollInputEvents this frame; IsKeyDown + edge matches grave / Esc.
@@ -356,6 +369,89 @@ public sealed class SleuthRayGame : ISleuthRayGame
             float worldH = map.Height * map.TileHeight * mapScale;
             playerWorldPos.X = Math.Clamp(playerWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
             playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+
+            if (!catIsWalking)
+            {
+                catDrawRow = catIdleRow;
+                catAnimTimer += dt;
+                while (catAnimTimer >= catIdleFrameSeconds)
+                {
+                    catAnimTimer -= catIdleFrameSeconds;
+                    catFrameIndex = (catFrameIndex + 1) % catIdleFrameCount;
+                }
+
+                catBehaviorTimer -= dt;
+                if (catBehaviorTimer <= 0f)
+                {
+                    if (Random.Shared.NextSingle() < 0.58f)
+                    {
+                        catIsWalking = true;
+                        float toHomeX = catHomePos.X - catWorldPos.X;
+                        int towardHome = toHomeX > 6f ? 1 : (toHomeX < -6f ? -1 : 0);
+                        if (towardHome != 0 && Random.Shared.NextSingle() < 0.35f)
+                        {
+                            catWalkFacingSign = towardHome;
+                        }
+                        else
+                        {
+                            catWalkFacingSign = Random.Shared.Next(0, 2) == 0 ? -1 : 1;
+                        }
+
+                        catWalkTimeLeft = catWalkTimeMin + Random.Shared.NextSingle() * (catWalkTimeMax - catWalkTimeMin);
+                        catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
+                        catFrameIndex = 0;
+                        catAnimTimer = 0f;
+                    }
+                    else
+                    {
+                        catBehaviorTimer = catIdleWaitMin + Random.Shared.NextSingle() * (catIdleWaitMax - catIdleWaitMin);
+                    }
+                }
+            }
+            else
+            {
+                catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
+                float dx = catWalkFacingSign * catWalkSpeed * dt;
+                catWorldPos.X += dx;
+                if (map.OverlapsBlockingTile(catWorldPos, mapScale, catHitHalfW, catHitHalfH))
+                {
+                    catWorldPos.X -= dx;
+                    catWalkFacingSign = -catWalkFacingSign;
+                    catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
+                }
+
+                float leashDx = catWorldPos.X - catHomePos.X;
+                if (leashDx > catLeashRadius)
+                {
+                    catWalkFacingSign = -1;
+                    catDrawRow = catWalkLeftRow;
+                }
+                else if (leashDx < -catLeashRadius)
+                {
+                    catWalkFacingSign = 1;
+                    catDrawRow = catWalkRightRow;
+                }
+
+                catAnimTimer += dt;
+                while (catAnimTimer >= catWalkFrameSeconds)
+                {
+                    catAnimTimer -= catWalkFrameSeconds;
+                    catFrameIndex = (catFrameIndex + 1) % catWalkFrameCount;
+                }
+
+                catWalkTimeLeft -= dt;
+                if (catWalkTimeLeft <= 0f)
+                {
+                    catIsWalking = false;
+                    catBehaviorTimer = catIdleWaitMin + Random.Shared.NextSingle() * (catIdleWaitMax - catIdleWaitMin);
+                    catDrawRow = catIdleRow;
+                    catFrameIndex = 0;
+                    catAnimTimer = 0f;
+                }
+            }
+
+            catWorldPos.X = Math.Clamp(catWorldPos.X, catHitHalfW, Math.Max(catHitHalfW, worldW - catHitHalfW));
+            catWorldPos.Y = Math.Clamp(catWorldPos.Y, catHitHalfH, Math.Max(catHitHalfH, worldH - catHitHalfH));
 
             float speed = playerVel.Length();
             // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
@@ -780,11 +876,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
             // Draw map (16x16 tiles) behind UI/sprites.
             map.Draw(scale: mapScale, offset: cameraOffsetSmoothed);
 
-            int textWidth = Raylib.MeasureText(message, 24);
-            int textX = (screenWidth - textWidth) / 2;
-            int textY = screenHeight / 2 + 40;
-            Raylib.DrawText(message, textX, textY, 24, Color.RAYWHITE);
-
             int currentFrame = frameCycle[cycleIndex];
             var src = new Rectangle(currentFrame * frameWidth, currentRow * frameHeight, frameWidth, frameHeight);
 
@@ -893,7 +984,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Raylib.DrawRectangleLinesEx(agentBarBg, 1f, new Color(20, 20, 20, 255));
             }
 
-            var catSrc = new Rectangle(catIdleFrameIndex * catFrameSize, catIdleRow * catFrameSize, catFrameSize, catFrameSize);
+            int catStripFrameCount = catIsWalking ? catWalkFrameCount : catIdleFrameCount;
+            int catFrameSafe = catFrameIndex % catStripFrameCount;
+            var catSrc = new Rectangle(catFrameSafe * catFrameSize, catDrawRow * catFrameSize, catFrameSize, catFrameSize);
             Vector2 catScreen = cameraOffsetSmoothed + catWorldPos;
             float catW = catFrameSize * catDrawScale;
             float catH = catFrameSize * catDrawScale;
@@ -964,6 +1057,28 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Color bCol = bullets[i].FromPlayer ? Color.YELLOW : new Color((byte)255, (byte)140, (byte)60, (byte)255);
                 Raylib.DrawCircleV(screen, bulletRadius, bCol);
             }
+
+            const int hintFont = 22;
+            const int hintPad = 12;
+            const int hintLineGap = 4;
+            const int hintMargin = 14;
+            int hintW = Math.Max(Raylib.MeasureText(hintLine1, hintFont), Raylib.MeasureText(hintLine2, hintFont));
+            int hintBoxW = hintW + hintPad * 2;
+            int hintBoxH = hintFont * 2 + hintLineGap + hintPad * 2;
+            int hintBoxX = hintMargin;
+            int hintBoxY = screenHeight - hintBoxH - hintMargin;
+            var hintBg = new Rectangle(hintBoxX, hintBoxY, hintBoxW, hintBoxH);
+            Raylib.DrawRectangleRec(hintBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
+            Raylib.DrawRectangleLinesEx(hintBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
+            int hx = hintBoxX + hintPad;
+            int hy = hintBoxY + hintPad;
+            Color hintShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
+            Color hintFg = new Color((byte)235, (byte)242, (byte)255, (byte)255);
+            Raylib.DrawText(hintLine1, hx + 2, hy + 2, hintFont, hintShadow);
+            Raylib.DrawText(hintLine1, hx, hy, hintFont, hintFg);
+            hy += hintFont + hintLineGap;
+            Raylib.DrawText(hintLine2, hx + 2, hy + 2, hintFont, hintShadow);
+            Raylib.DrawText(hintLine2, hx, hy, hintFont, hintFg);
 
             if (showInputDebugOverlay)
             {
