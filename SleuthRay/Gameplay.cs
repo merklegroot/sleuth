@@ -153,4 +153,28 @@ internal static class Gameplay
     public static bool WorldRectsOverlap(Vector2 aCenter, float aHalfW, float aHalfH, Vector2 bCenter, float bHalfW, float bHalfH) =>
         MathF.Abs(aCenter.X - bCenter.X) < (aHalfW + bHalfW)
         && MathF.Abs(aCenter.Y - bCenter.Y) < (aHalfH + bHalfH);
+
+    /// <summary>Separates overlapping world AABBs by moving <paramref name="mover"/> along the shallow penetration axis.</summary>
+    public static void PushOutOfWorldRect(ref Vector2 mover, float moverHalfW, float moverHalfH, Vector2 blocker, float blockerHalfW, float blockerHalfH)
+    {
+        float dx = mover.X - blocker.X;
+        float dy = mover.Y - blocker.Y;
+        float overlapX = moverHalfW + blockerHalfW - MathF.Abs(dx);
+        float overlapY = moverHalfH + blockerHalfH - MathF.Abs(dy);
+        if (overlapX <= 0f || overlapY <= 0f)
+        {
+            return;
+        }
+
+        float signX = dx == 0f ? 1f : MathF.Sign(dx);
+        float signY = dy == 0f ? 1f : MathF.Sign(dy);
+        if (overlapX < overlapY)
+        {
+            mover.X += signX * overlapX;
+        }
+        else
+        {
+            mover.Y += signY * overlapY;
+        }
+    }
 }

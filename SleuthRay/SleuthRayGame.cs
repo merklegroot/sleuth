@@ -573,25 +573,39 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             Vector2 npcDelta = wandererVel * dt;
             wandererWorldPos.X += npcDelta.X;
-            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
-                || Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+            bool wanderMapBlockX = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
+            bool wanderCatBlockX = Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+            if (wanderMapBlockX || wanderCatBlockX)
             {
                 wandererWorldPos.X -= npcDelta.X;
                 wandererVel.X = 0f;
-                wandererTurnTimer = 0f;
+                if (wanderMapBlockX)
+                {
+                    wandererTurnTimer = 0f;
+                }
             }
 
             wandererWorldPos.Y += npcDelta.Y;
-            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
-                || Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+            bool wanderMapBlockY = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
+            bool wanderCatBlockY = Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+            if (wanderMapBlockY || wanderCatBlockY)
             {
                 wandererWorldPos.Y -= npcDelta.Y;
                 wandererVel.Y = 0f;
-                wandererTurnTimer = 0f;
+                if (wanderMapBlockY)
+                {
+                    wandererTurnTimer = 0f;
+                }
             }
 
             wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
             wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+            if (Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+            {
+                Gameplay.PushOutOfWorldRect(ref wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+                wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+            }
 
             Vector2 wFace = wandererVel.LengthSquared() > 4f ? Vector2.Normalize(wandererVel) : wandererWanderDir;
             if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
@@ -661,25 +675,39 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 Vector2 agentDelta = agentVel * dt;
                 agentWorldPos.X += agentDelta.X;
-                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
-                    || Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+                bool agentMapBlockX = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
+                bool agentCatBlockX = Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                if (agentMapBlockX || agentCatBlockX)
                 {
                     agentWorldPos.X -= agentDelta.X;
                     agentVel.X = 0f;
-                    agentTurnTimer = 0f;
+                    if (agentMapBlockX)
+                    {
+                        agentTurnTimer = 0f;
+                    }
                 }
 
                 agentWorldPos.Y += agentDelta.Y;
-                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
-                    || Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+                bool agentMapBlockY = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
+                bool agentCatBlockY = Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                if (agentMapBlockY || agentCatBlockY)
                 {
                     agentWorldPos.Y -= agentDelta.Y;
                     agentVel.Y = 0f;
-                    agentTurnTimer = 0f;
+                    if (agentMapBlockY)
+                    {
+                        agentTurnTimer = 0f;
+                    }
                 }
 
                 agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
                 agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+                if (Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
+                {
+                    Gameplay.PushOutOfWorldRect(ref agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                    agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+                    agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+                }
 
                 Vector2 aFace = agentVel.LengthSquared() > 4f ? Vector2.Normalize(agentVel) : agentWanderDir;
                 if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
