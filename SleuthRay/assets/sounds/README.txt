@@ -1,9 +1,6 @@
-Gunshot audio
--------------
-The game loads: assets/sounds/gunshot.wav (copied next to the executable on build).
+Gunshot audio moved
+--------------------
+The shot sound is no longer copied next to the executable. It is embedded as **Resources/gunshot.wav**
+(see SleuthRay/Resources/README.txt).
 
-Default file: small in-repo placeholder. For audio from Dan Sfx's "Free Single HandGun Sound Effects Pack":
-  https://cdansantana.itch.io/hgsfx
-download HG.rar, extract any shot WAV you prefer, and replace SleuthRay/assets/sounds/gunshot.wav (same name).
-
-See repo ATTRIBUTION.md for credit when using the pack.
+You can still point the game at any WAV with **SLEUTHRAY_GUNSHOT_WAV** (full path) without editing the project.

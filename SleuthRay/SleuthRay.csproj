@@ -13,13 +13,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\wanderer_talk.json" LogicalName="wanderer_talk.json" />
+    <EmbeddedResource Include="Resources\gunshot.wav" LogicalName="gunshot.wav" />
   </ItemGroup>
 
   <ItemGroup>
     <Content Include="assets\gamecontrollerdb_xbox_mac.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="assets\sounds\gunshot.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

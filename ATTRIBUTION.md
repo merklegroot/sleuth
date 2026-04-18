@@ -35,7 +35,7 @@ You may use the assets in non-commercial and commercial projects and adapt or mo
 
 Handgun / revolver-style sound effects (WAV). The author has stated on the itch.io page (comments) that there is no specific license document but you may use the assets, including in commercial games; still read the pack page and comments for the latest terms. Credit **Dan Sfx** / the pack page where you list third-party audio.
 
-**In this repo:** `SleuthRay/assets/sounds/gunshot.wav` is a short **placeholder** clip (synthesized) so the game plays a shot without the itch download. **To use an actual sound from the pack**, extract [HG.rar](https://cdansantana.itch.io/hgsfx), pick any handgun shot WAV you like, and **replace** `assets/sounds/gunshot.wav` (keep the same filename). The game loads that path at runtime.
+**In this repo:** The handgun shot is embedded as `SleuthRay/Resources/gunshot.wav` (manifest name `gunshot.wav`). The committed WAV is a short **placeholder**; overwrite that file with audio from [HG.rar](https://cdansantana.itch.io/hgsfx) (for example export or rename **`HG - Raw - Shoot - Mid - 02.wav`** to `gunshot.wav` and replace `Resources/gunshot.wav`), then rebuild. Alternatively set env **`SLEUTHRAY_GUNSHOT_WAV`** to the full path of an external WAV to override the embedded clip at runtime without rebuilding.
 
 ---
 

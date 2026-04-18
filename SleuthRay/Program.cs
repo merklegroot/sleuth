@@ -27,21 +27,28 @@ Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
 Texture2D wandererTexture = Raylib.LoadTexture("assets/characters/character_4_frame16x20.png");
 Raylib.SetTextureFilter(wandererTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
+Texture2D agentTexture = Raylib.LoadTexture("assets/characters/character_9_frame16x20.png");
+Raylib.SetTextureFilter(agentTexture, TextureFilter.TEXTURE_FILTER_POINT);
+
 Texture2D gunTexture = Raylib.LoadTexture("assets/weapons/1Revolver01.png");
 Raylib.SetTextureFilter(gunTexture, TextureFilter.TEXTURE_FILTER_POINT);
 
-string gunshotPath = Path.Combine(AppContext.BaseDirectory, "assets", "sounds", "gunshot.wav");
-Sound gunshotSound = default;
-bool gunshotSoundReady = false;
-if (File.Exists(gunshotPath))
+/// <summary>Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.</summary>
+const int gunshotVoiceCount = 6;
+const string gunshotEmbeddedResourceName = "gunshot.wav";
+var gunshotVoices = new Sound[gunshotVoiceCount];
+int gunshotVoiceNext = 0;
+bool gunshotSoundReady = TryInitGunshotVoices(gunshotVoices, out string gunshotLoadDetail);
+if (!gunshotSoundReady)
 {
-    gunshotSound = Raylib.LoadSound(gunshotPath);
-    gunshotSoundReady = Raylib.IsSoundReady(gunshotSound);
-    if (gunshotSoundReady)
-    {
-        Raylib.SetSoundVolume(gunshotSound, 0.88f);
-    }
+    Console.WriteLine($"[SleuthRay] WARNING: Gunshot not loaded ({gunshotLoadDetail}). Shots will be silent.");
 }
+#if DEBUG
+else
+{
+    Console.WriteLine($"[SleuthRay] Gunshot ready — {gunshotLoadDetail}");
+}
+#endif
 
 const float mapScale = 3f;
 /// <summary>World-space half extents of the player collision box (centered on <see cref="playerWorldPos"/>).</summary>
@@ -127,6 +134,22 @@ const float wandererShootIntervalMin = 1.5f;
 const float wandererShootIntervalMax = 3.4f;
 const float wandererShootRetryWhenBlind = 0.45f;
 const float wandererShootMaxRange = 540f;
+
+/// <summary>Second hostile NPC (character_9 sheet); same strip layout and combat as wanderer, no dialogue.</summary>
+Vector2 agentWorldPos = FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
+Vector2 agentVel = Vector2.Zero;
+Vector2 agentWanderDir = new Vector2(-1f, 0f);
+float agentTurnTimer = 0f;
+int agentCycleIndex = 0;
+int agentRow = 0;
+float agentAnimTimer = 0f;
+bool agentAlive = true;
+float agentRespawnTimer = 0f;
+const int agentMaxHealth = 6;
+int agentHealth = agentMaxHealth;
+float agentHitFlashTimer = 0f;
+float agentShootCooldown = 2.2f + Random.Shared.NextSingle() * 1.4f;
+
 string wandererSpeech = "";
 float wandererSpeechTimer = 0f;
 float wandererChatterCooldown = 14f;
@@ -157,6 +180,7 @@ while (!Raylib.WindowShouldClose())
     float dt = Raylib.GetFrameTime();
 
     wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
+    agentHitFlashTimer = MathF.Max(0f, agentHitFlashTimer - dt);
     playerHitFlashTimer = MathF.Max(0f, playerHitFlashTimer - dt);
     wandererSpeechTimer = MathF.Max(0f, wandererSpeechTimer - dt);
     if (wandererAlive)
@@ -370,6 +394,24 @@ while (!Raylib.WindowShouldClose())
         }
     }
 
+    if (!agentAlive)
+    {
+        agentRespawnTimer -= dt;
+        if (agentRespawnTimer <= 0f)
+        {
+            float ang = Random.Shared.NextSingle() * MathF.Tau + 1.7f;
+            Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 155f;
+            agentWorldPos = FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+            agentVel = Vector2.Zero;
+            agentWanderDir = new Vector2(-1f, 0f);
+            agentTurnTimer = 0f;
+            agentHealth = agentMaxHealth;
+            agentHitFlashTimer = 0f;
+            agentAlive = true;
+            agentShootCooldown = 1.4f + Random.Shared.NextSingle() * 1.8f;
+        }
+    }
+
     if (wandererAlive)
     {
     // Pick a new random 8-way heading every few seconds; slide on walls like the player.
@@ -441,7 +483,8 @@ while (!Raylib.WindowShouldClose())
                 + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
             if (gunshotSoundReady)
             {
-                Raylib.PlaySound(gunshotSound);
+                Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+                gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
             }
 
             wandererSpeech = WandererTalk.Pick(WandererTalk.Shoot);
@@ -455,6 +498,87 @@ while (!Raylib.WindowShouldClose())
     }
 
     } // wandererAlive update block
+
+    if (agentAlive)
+    {
+        agentTurnTimer -= dt;
+        if (agentTurnTimer <= 0f)
+        {
+            float ang = Random.Shared.Next(0, 8) * (MathF.PI / 4f);
+            agentWanderDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
+            agentTurnTimer = wandererTurnMin + Random.Shared.NextSingle() * (wandererTurnMax - wandererTurnMin);
+        }
+
+        Vector2 agentDesiredVel = agentWanderDir * wandererSpeed;
+        agentVel = Approach(agentVel, agentDesiredVel, wandererAccel * dt);
+
+        Vector2 agentDelta = agentVel * dt;
+        agentWorldPos.X += agentDelta.X;
+        if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+        {
+            agentWorldPos.X -= agentDelta.X;
+            agentVel.X = 0f;
+            agentTurnTimer = 0f;
+        }
+
+        agentWorldPos.Y += agentDelta.Y;
+        if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+        {
+            agentWorldPos.Y -= agentDelta.Y;
+            agentVel.Y = 0f;
+            agentTurnTimer = 0f;
+        }
+
+        agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+        agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+
+        Vector2 aFace = agentVel.LengthSquared() > 4f ? Vector2.Normalize(agentVel) : agentWanderDir;
+        if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
+        {
+            agentRow = aFace.X < 0f ? 1 : 2;
+        }
+        else
+        {
+            agentRow = aFace.Y < 0f ? 3 : 0;
+        }
+
+        float aSpeed = agentVel.Length();
+        if (aSpeed > 10f)
+        {
+            agentAnimTimer += dt * MathF.Max(0.35f, aSpeed / wandererSpeed);
+            while (agentAnimTimer >= wandererAnimFrameSeconds)
+            {
+                agentAnimTimer -= wandererAnimFrameSeconds;
+                agentCycleIndex = (agentCycleIndex + 1) % frameCycle.Length;
+            }
+        }
+
+        agentShootCooldown -= dt;
+        if (agentShootCooldown <= 0f)
+        {
+            Vector2 toPlayerA = playerWorldPos - agentWorldPos;
+            float distSqA = toPlayerA.LengthSquared();
+            if (distSqA > 40f * 40f
+                && distSqA <= wandererShootMaxRange * wandererShootMaxRange
+                && LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale))
+            {
+                float distA = MathF.Sqrt(distSqA);
+                Vector2 ndA = toPlayerA / distA;
+                bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false));
+                agentShootCooldown = wandererShootIntervalMin
+                    + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
+                if (gunshotSoundReady)
+                {
+                    Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
+                }
+            }
+            else
+            {
+                agentShootCooldown = wandererShootRetryWhenBlind;
+            }
+        }
+    }
 
     // Camera follow (used for map + bullets this frame).
     Vector2 cameraOffsetTarget = playerScreenPos - playerWorldPos;
@@ -531,7 +655,8 @@ while (!Raylib.WindowShouldClose())
 
         if (gunshotSoundReady)
         {
-            Raylib.PlaySound(gunshotSound);
+            Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+            gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
         }
 
         Vector2 vel = dir * bulletSpeed;
@@ -565,6 +690,18 @@ while (!Raylib.WindowShouldClose())
             else
             {
                 wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
+            }
+        }
+        else if (fromPlayer && agentAlive && CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
+        {
+            bullets.RemoveAt(i);
+            agentHitFlashTimer = wandererHitFlashDuration;
+            agentHealth--;
+            if (agentHealth <= 0)
+            {
+                agentAlive = false;
+                agentVel = Vector2.Zero;
+                agentRespawnTimer = wandererRespawnDelay;
             }
         }
         else if (!fromPlayer && CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
@@ -665,6 +802,41 @@ while (!Raylib.WindowShouldClose())
             wandererSpeechFontPx,
             wandererSpeechMaxContentWidth,
             wandererSpeechBubblePad);
+    }
+
+    if (agentAlive)
+    {
+        int agentFrame = frameCycle[agentCycleIndex];
+        var agentSrc = new Rectangle(agentFrame * frameWidth, agentRow * frameHeight, frameWidth, frameHeight);
+        Vector2 agentScreen = cameraOffsetSmoothed + agentWorldPos;
+        float agentCharX = agentScreen.X - destW / 2f;
+        float agentCharY = agentScreen.Y - destH / 2f;
+        var agentDest = new Rectangle(agentCharX, agentCharY, destW, destH);
+        Color agentTint = Color.WHITE;
+        if (agentHitFlashTimer > 0f)
+        {
+            bool on = ((int)(agentHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+            if (on)
+            {
+                agentTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+            }
+        }
+
+        Raylib.DrawTexturePro(agentTexture, agentSrc, agentDest, Vector2.Zero, 0f, agentTint);
+
+        float agentBarW = destW - wandererHealthBarPadX * 2f;
+        float agentBarLeft = agentScreen.X - agentBarW * 0.5f;
+        float agentBarTop = agentCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
+        var agentBarBg = new Rectangle(agentBarLeft, agentBarTop, agentBarW, wandererHealthBarHeight);
+        Raylib.DrawRectangleRec(agentBarBg, new Color(45, 22, 8, 255));
+        float agentHpFrac = agentHealth / (float)agentMaxHealth;
+        if (agentHpFrac > 0f)
+        {
+            var agentBarFill = new Rectangle(agentBarLeft, agentBarTop, agentBarW * agentHpFrac, wandererHealthBarHeight);
+            Raylib.DrawRectangleRec(agentBarFill, new Color(210, 130, 55, 255));
+        }
+
+        Raylib.DrawRectangleLinesEx(agentBarBg, 1f, new Color(20, 20, 20, 255));
     }
 
     float charX = playerScreenPos.X - destW / 2f;
@@ -787,15 +959,165 @@ while (!Raylib.WindowShouldClose())
 map.Unload();
 if (gunshotSoundReady)
 {
-    Raylib.UnloadSound(gunshotSound);
+    for (int gi = 0; gi < gunshotVoiceCount; gi++)
+    {
+        Raylib.UnloadSound(gunshotVoices[gi]);
+    }
 }
 
 Raylib.CloseAudioDevice();
 
 Raylib.UnloadTexture(gunTexture);
 Raylib.UnloadTexture(wandererTexture);
+Raylib.UnloadTexture(agentTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+/// <summary>Optional <c>SLEUTHRAY_GUNSHOT_WAV</c> (full path to a WAV) overrides the embedded gunshot.</summary>
+static string? ResolveGunshotOverridePath()
+{
+    string? fromEnv = Environment.GetEnvironmentVariable("SLEUTHRAY_GUNSHOT_WAV");
+    if (string.IsNullOrWhiteSpace(fromEnv))
+    {
+        return null;
+    }
+
+    try
+    {
+        string p = Path.GetFullPath(fromEnv.Trim());
+        if (File.Exists(p))
+        {
+            return p;
+        }
+    }
+    catch
+    {
+        // ignore invalid paths
+    }
+
+    return null;
+}
+
+static byte[]? ReadManifestResourceBytesOrNull(Assembly asm, string resourceName)
+{
+    using Stream? stream = asm.GetManifestResourceStream(resourceName);
+    if (stream is null)
+    {
+        return null;
+    }
+
+    using var ms = new MemoryStream();
+    stream.CopyTo(ms);
+    return ms.ToArray();
+}
+
+static void CleanupPartialGunshotVoices(Sound[] voices)
+{
+    for (int j = 0; j < voices.Length; j++)
+    {
+        if (Raylib.IsSoundReady(voices[j]))
+        {
+            Raylib.UnloadSound(voices[j]);
+        }
+
+        voices[j] = default;
+    }
+}
+
+static void ConfigureGunshotVoices(Sound[] voices)
+{
+    for (int i = 0; i < voices.Length; i++)
+    {
+        Raylib.SetSoundVolume(voices[i], 0.88f);
+        Raylib.SetSoundPitch(voices[i], 1f);
+    }
+}
+
+static bool TryLoadGunshotVoicesFromFile(string path, Sound[] voices, out string error)
+{
+    error = "";
+    for (int gi = 0; gi < voices.Length; gi++)
+    {
+        voices[gi] = Raylib.LoadSound(path);
+        if (!Raylib.IsSoundReady(voices[gi]))
+        {
+            error = $"LoadSound failed for voice {gi} ({path})";
+            CleanupPartialGunshotVoices(voices);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool TryLoadGunshotVoicesFromEmbedded(byte[] wavBytes, Sound[] voices, out string error)
+{
+    error = "";
+    for (int gi = 0; gi < voices.Length; gi++)
+    {
+        // Raylib compares fileType to ".wav" (leading dot); "wav" matches nothing and yields an empty wave.
+        Wave w = Raylib.LoadWaveFromMemory(".wav", wavBytes);
+        if (!Raylib.IsWaveReady(w))
+        {
+            error = $"LoadWaveFromMemory failed for voice {gi}";
+            Raylib.UnloadWave(w);
+            CleanupPartialGunshotVoices(voices);
+            return false;
+        }
+
+        voices[gi] = Raylib.LoadSoundFromWave(w);
+        Raylib.UnloadWave(w);
+        if (!Raylib.IsSoundReady(voices[gi]))
+        {
+            error = $"LoadSoundFromWave failed for voice {gi}";
+            CleanupPartialGunshotVoices(voices);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool TryInitGunshotVoices(Sound[] voices, out string detail)
+{
+    if (voices.Length != gunshotVoiceCount)
+    {
+        detail = "internal: gunshot voice array length mismatch";
+        return false;
+    }
+
+    string? overridePath = ResolveGunshotOverridePath();
+    if (overridePath is not null)
+    {
+        if (!TryLoadGunshotVoicesFromFile(overridePath, voices, out string fileErr))
+        {
+            detail = fileErr;
+            return false;
+        }
+
+        ConfigureGunshotVoices(voices);
+        detail = $"override file: {overridePath}";
+        return true;
+    }
+
+    byte[]? embedded = ReadManifestResourceBytesOrNull(Assembly.GetExecutingAssembly(), gunshotEmbeddedResourceName);
+    if (embedded is null || embedded.Length == 0)
+    {
+        string names = string.Join(", ", Assembly.GetExecutingAssembly().GetManifestResourceNames());
+        detail = $"missing embedded resource '{gunshotEmbeddedResourceName}'. Manifest: {names}";
+        return false;
+    }
+
+    if (!TryLoadGunshotVoicesFromEmbedded(embedded, voices, out string embErr))
+    {
+        detail = embErr;
+        return false;
+    }
+
+    ConfigureGunshotVoices(voices);
+    detail = $"embedded {gunshotEmbeddedResourceName} ({embedded.Length} bytes)";
+    return true;
+}
 
 static List<string> WrapWandererSpeechLines(string text, int fontSize, float maxWidth)
 {
