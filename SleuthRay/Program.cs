@@ -558,9 +558,9 @@ while (!Raylib.WindowShouldClose())
             {
                 wandererAlive = false;
                 wandererVel = Vector2.Zero;
-                wandererRespawnTimer = wandererRespawnDelay;
-                wandererSpeech = "";
-                wandererSpeechTimer = 0f;
+                wandererSpeech = WandererTalk.Pick(WandererTalk.Death);
+                wandererSpeechTimer = wandererSpeechShowSeconds;
+                wandererRespawnTimer = MathF.Max(wandererRespawnDelay, wandererSpeechShowSeconds + 0.45f);
             }
             else
             {
@@ -651,6 +651,20 @@ while (!Raylib.WindowShouldClose())
                 wandererSpeechMaxContentWidth,
                 wandererSpeechBubblePad);
         }
+    }
+    else if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
+    {
+        // Last words at the spot he dropped (sprite hidden while dead).
+        Vector2 corpseScreen = cameraOffsetSmoothed + wandererWorldPos;
+        float corpseCharY = corpseScreen.Y - destH / 2f;
+        float corpseBarTop = corpseCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
+        DrawWandererSpeechBubble(
+            corpseScreen.X,
+            corpseBarTop,
+            wandererSpeech,
+            wandererSpeechFontPx,
+            wandererSpeechMaxContentWidth,
+            wandererSpeechBubblePad);
     }
 
     float charX = playerScreenPos.X - destW / 2f;
@@ -1494,6 +1508,7 @@ file static class WandererTalk
     public static string[] Shoot { get; private set; } = [];
     public static string[] Hurt { get; private set; } = [];
     public static string[] Spawn { get; private set; } = [];
+    public static string[] Death { get; private set; } = [];
 
     public static void InitFromEmbeddedResource()
     {
@@ -1517,6 +1532,7 @@ file static class WandererTalk
         Shoot = RequireLines(data.Shoot, nameof(data.Shoot));
         Hurt = RequireLines(data.Hurt, nameof(data.Hurt));
         Spawn = RequireLines(data.Spawn, nameof(data.Spawn));
+        Death = RequireLines(data.Death, nameof(data.Death));
     }
 
     static string[] RequireLines(string[]? lines, string fieldName)
@@ -1545,5 +1561,6 @@ file static class WandererTalk
         public string[]? Shoot { get; set; }
         public string[]? Hurt { get; set; }
         public string[]? Spawn { get; set; }
+        public string[]? Death { get; set; }
     }
 }
