@@ -16,7 +16,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int screenWidth = _options.ScreenWidth;
         int screenHeight = _options.ScreenHeight;
 
-        const string message = "Press ESC to exit.";
+        const string message = "Tab: status & inventory   Esc: exit";
 
         Raylib.InitWindow(screenWidth, screenHeight, _options.WindowTitle);
         Raylib.SetTargetFPS(60);
@@ -159,6 +159,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float wandererSpeechBubblePad = 10f;
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
+        bool statsMenuOpen = false;
 
         WandererTalk.InitFromEmbeddedResource();
         wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
@@ -178,6 +179,27 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             float dt = Raylib.GetFrameTime();
+
+            bool statsMenuToggle = Raylib.IsKeyPressed(KeyboardKey.KEY_TAB);
+            for (int g = 0; g < 4; g++)
+            {
+                if (Raylib.IsGamepadAvailable(g)
+                    && Raylib.IsGamepadButtonPressed(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_LEFT))
+                {
+                    statsMenuToggle = true;
+                    break;
+                }
+            }
+
+            if (statsMenuToggle)
+            {
+                statsMenuOpen = !statsMenuOpen;
+            }
+
+            if (statsMenuOpen)
+            {
+                dt = 0f;
+            }
 
             wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
             agentHitFlashTimer = MathF.Max(0f, agentHitFlashTimer - dt);
@@ -647,7 +669,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            bool firePressed = (spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed;
+            bool firePressed = !statsMenuOpen
+                && ((spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed);
             if (firePressed)
             {
                 Vector2 dir = lastShotDir;
@@ -930,6 +953,19 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     lateGp0Ly,
                     latePickedLx,
                     latePickedLy);
+            }
+
+            if (statsMenuOpen)
+            {
+                PlayerStatsMenuUi.Draw(
+                    screenWidth,
+                    screenHeight,
+                    playerHealth,
+                    playerMaxHealth,
+                    playerWorldPos,
+                    map.TileWidth,
+                    map.TileHeight,
+                    mapScale);
             }
 
             Raylib.EndDrawing();
