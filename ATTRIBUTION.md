@@ -39,8 +39,20 @@ Handgun / revolver-style sound effects (WAV). The author has stated on the itch.
 
 ---
 
+## Last tick — 32x32 Pixel kittens Cats (Animated NPC)
+
+- **Pack:** [32x32 Pixel kittens Cats — Animated NPC](https://last-tick.itch.io/animated-pixel-kittens-cats-32x32)  
+- **Creator:** [Last tick](https://last-tick.itch.io)  
+
+**Licence (summary from the pack’s itch.io page)**  
+
+Use in personal and commercial projects is allowed. You may not redistribute or resell the raw materials separately. Read the pack page for the latest terms (including paid vs free pack boundaries). Credit **Last tick** / the pack title where you list third-party art.
+
+---
+
 ## Suggested in-game credit lines
 
 - *Ranitayas Guns Pack* — Ranitaya Studios  
 - *Super Retro World* character & interior art — Gif  
 - *Free Single HandGun Sound Effects Pack* — Dan Sfx ([itch.io](https://cdansantana.itch.io/hgsfx))  
+- *32x32 Pixel kittens Cats — Animated NPC* — Last tick ([itch.io](https://last-tick.itch.io/animated-pixel-kittens-cats-32x32))  

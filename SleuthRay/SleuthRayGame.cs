@@ -34,6 +34,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Texture2D wandererTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_4_frame16x20.png");
         Texture2D agentTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_9_frame16x20.png");
         Texture2D gunTexture = RaylibTextures.LoadTexturePixel("assets/weapons/1Revolver01.png");
+        Texture2D catTexture = RaylibTextures.LoadTexturePixel("assets/cats/cat.png");
 
         // Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.
         var gunshotVoices = new Sound[GunshotAudio.VoiceCount];
@@ -152,6 +153,16 @@ public sealed class SleuthRayGame : ISleuthRayGame
         float agentHitFlashTimer = 0f;
         float agentShootCooldown = 2.2f + Random.Shared.NextSingle() * 1.4f;
 
+        // Cat: 64×64 frames; idle strip is row 13 (1-based) → zero-based row index 12, 8 frames across.
+        const int catFrameSize = 64;
+        const int catIdleRow = 12;
+        const int catIdleFrameCount = 8;
+        const float catIdleFrameSeconds = 0.14f;
+        const float catDrawScale = 2f;
+        Vector2 catWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH);
+        int catIdleFrameIndex = 0;
+        float catIdleAnimTimer = 0f;
+
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
         float wandererChatterCooldown = 14f;
@@ -181,6 +192,13 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             float dt = Raylib.GetFrameTime();
+
+            catIdleAnimTimer += dt;
+            while (catIdleAnimTimer >= catIdleFrameSeconds)
+            {
+                catIdleAnimTimer -= catIdleFrameSeconds;
+                catIdleFrameIndex = (catIdleFrameIndex + 1) % catIdleFrameCount;
+            }
 
             bool tabHeld = Raylib.IsKeyDown(KeyboardKey.KEY_TAB);
             // IsKeyPressed is cleared by extra PollInputEvents this frame; IsKeyDown + edge matches grave / Esc.
@@ -875,6 +893,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Raylib.DrawRectangleLinesEx(agentBarBg, 1f, new Color(20, 20, 20, 255));
             }
 
+            var catSrc = new Rectangle(catIdleFrameIndex * catFrameSize, catIdleRow * catFrameSize, catFrameSize, catFrameSize);
+            Vector2 catScreen = cameraOffsetSmoothed + catWorldPos;
+            float catW = catFrameSize * catDrawScale;
+            float catH = catFrameSize * catDrawScale;
+            float catLeft = catScreen.X - catW * 0.5f;
+            float catTop = catScreen.Y - catH * 0.5f;
+            var catDest = new Rectangle(catLeft, catTop, catW, catH);
+            Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
+
             float charX = playerScreenPos.X - destW / 2f;
             float charY = playerScreenPos.Y - destH / 2f;
             var dest = new Rectangle(charX, charY, destW, destH);
@@ -1020,6 +1047,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Raylib.CloseAudioDevice();
 
         Raylib.UnloadTexture(gunTexture);
+        Raylib.UnloadTexture(catTexture);
         Raylib.UnloadTexture(wandererTexture);
         Raylib.UnloadTexture(agentTexture);
         Raylib.UnloadTexture(characterTexture);
