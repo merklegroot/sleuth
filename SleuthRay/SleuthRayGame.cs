@@ -573,7 +573,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             Vector2 npcDelta = wandererVel * dt;
             wandererWorldPos.X += npcDelta.X;
-            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
+                || Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
             {
                 wandererWorldPos.X -= npcDelta.X;
                 wandererVel.X = 0f;
@@ -581,7 +582,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             wandererWorldPos.Y += npcDelta.Y;
-            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+            if (map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
+                || Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
             {
                 wandererWorldPos.Y -= npcDelta.Y;
                 wandererVel.Y = 0f;
@@ -659,7 +661,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 Vector2 agentDelta = agentVel * dt;
                 agentWorldPos.X += agentDelta.X;
-                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
+                    || Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
                 {
                     agentWorldPos.X -= agentDelta.X;
                     agentVel.X = 0f;
@@ -667,7 +670,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 agentWorldPos.Y += agentDelta.Y;
-                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+                if (map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH)
+                    || Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
                 {
                     agentWorldPos.Y -= agentDelta.Y;
                     agentVel.Y = 0f;

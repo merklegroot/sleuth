@@ -149,4 +149,8 @@ internal static class Gameplay
         float dy = circleCenter.Y - ny;
         return dx * dx + dy * dy <= radius * radius;
     }
+
+    public static bool WorldRectsOverlap(Vector2 aCenter, float aHalfW, float aHalfH, Vector2 bCenter, float bHalfW, float bHalfH) =>
+        MathF.Abs(aCenter.X - bCenter.X) < (aHalfW + bHalfW)
+        && MathF.Abs(aCenter.Y - bCenter.Y) < (aHalfH + bHalfH);
 }
