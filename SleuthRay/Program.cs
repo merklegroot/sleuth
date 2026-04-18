@@ -1,7 +1,4 @@
 ﻿using System.Numerics;
-using System.Reflection;
-using System.Text.Json;
-using System.Xml.Linq;
 using Raylib_cs;
 
 const int screenWidth = 800;
@@ -16,22 +13,20 @@ Raylib.DisableEventWaiting();
 
 Raylib.InitAudioDevice();
 
-(int gamepadMappingsAccepted, string gamepadMappingsDetail) = TryLoadGamepadMappings();
+(int gamepadMappingsAccepted, string gamepadMappingsDetail) = GamepadMappings.TryLoad();
 
 TileMap map = TileMap.LoadFromTmx(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../tiled/map.tmx")));
-SetTexturePixelFilter(map.TilesetTexture);
+RaylibTextures.SetTexturePixelFilter(map.TilesetTexture);
 
-Texture2D characterTexture = LoadTexturePixel("assets/characters/character_1_frame16x20.png");
-Texture2D wandererTexture = LoadTexturePixel("assets/characters/character_4_frame16x20.png");
-Texture2D agentTexture = LoadTexturePixel("assets/characters/character_9_frame16x20.png");
-Texture2D gunTexture = LoadTexturePixel("assets/weapons/1Revolver01.png");
+Texture2D characterTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_1_frame16x20.png");
+Texture2D wandererTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_4_frame16x20.png");
+Texture2D agentTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_9_frame16x20.png");
+Texture2D gunTexture = RaylibTextures.LoadTexturePixel("assets/weapons/1Revolver01.png");
 
 /// <summary>Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.</summary>
-const int gunshotVoiceCount = 6;
-const string gunshotEmbeddedResourceName = "gunshot.wav";
-var gunshotVoices = new Sound[gunshotVoiceCount];
+var gunshotVoices = new Sound[GunshotAudio.VoiceCount];
 int gunshotVoiceNext = 0;
-bool gunshotSoundReady = TryInitGunshotVoices(gunshotVoices, out string gunshotLoadDetail);
+bool gunshotSoundReady = GunshotAudio.TryInitGunshotVoices(gunshotVoices, out string gunshotLoadDetail);
 if (!gunshotSoundReady)
 {
     Console.WriteLine($"[SleuthRay] WARNING: Gunshot not loaded ({gunshotLoadDetail}). Shots will be silent.");
@@ -98,7 +93,7 @@ float gunFlashTimer = 0f;
 Vector2 lastShotDir = new(0f, 1f);
 
 /// <summary>NPC shares player strip layout (16×20, 4 rows × 4 walk frames).</summary>
-Vector2 wandererWorldPos = FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
+Vector2 wandererWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
 Vector2 wandererVel = Vector2.Zero;
 Vector2 wandererWanderDir = new Vector2(1f, 0f);
 float wandererTurnTimer = 0f;
@@ -129,7 +124,7 @@ const float wandererShootRetryWhenBlind = 0.45f;
 const float wandererShootMaxRange = 540f;
 
 /// <summary>Second hostile NPC (character_9 sheet); same strip layout and combat as wanderer, no dialogue.</summary>
-Vector2 agentWorldPos = FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
+Vector2 agentWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
 Vector2 agentVel = Vector2.Zero;
 Vector2 agentWanderDir = new Vector2(-1f, 0f);
 float agentTurnTimer = 0f;
@@ -257,11 +252,11 @@ while (!Raylib.WindowShouldClose())
     Vector2 desiredVel = moveDir * moveSpeed * moveScale;
     if (hasInput)
     {
-        playerVel = Approach(playerVel, desiredVel, accel * dt);
+        playerVel = Gameplay.Approach(playerVel, desiredVel, accel * dt);
     }
     else
     {
-        playerVel = Approach(playerVel, Vector2.Zero, friction * dt);
+        playerVel = Gameplay.Approach(playerVel, Vector2.Zero, friction * dt);
     }
 
     Vector2 moveDelta = playerVel * dt;
@@ -373,7 +368,7 @@ while (!Raylib.WindowShouldClose())
         {
             float ang = Random.Shared.NextSingle() * MathF.Tau;
             Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 140f;
-            wandererWorldPos = FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+            wandererWorldPos = Gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
             wandererVel = Vector2.Zero;
             wandererWanderDir = new Vector2(1f, 0f);
             wandererTurnTimer = 0f;
@@ -394,7 +389,7 @@ while (!Raylib.WindowShouldClose())
         {
             float ang = Random.Shared.NextSingle() * MathF.Tau + 1.7f;
             Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 155f;
-            agentWorldPos = FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+            agentWorldPos = Gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
             agentVel = Vector2.Zero;
             agentWanderDir = new Vector2(-1f, 0f);
             agentTurnTimer = 0f;
@@ -417,7 +412,7 @@ while (!Raylib.WindowShouldClose())
     }
 
     Vector2 wanderDesiredVel = wandererWanderDir * wandererSpeed;
-    wandererVel = Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
+    wandererVel = Gameplay.Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
 
     Vector2 npcDelta = wandererVel * dt;
     wandererWorldPos.X += npcDelta.X;
@@ -467,7 +462,7 @@ while (!Raylib.WindowShouldClose())
         float distSq = toPlayer.LengthSquared();
         if (distSq > 40f * 40f
             && distSq <= wandererShootMaxRange * wandererShootMaxRange
-            && LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale))
+            && Gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf))
         {
             float dist = MathF.Sqrt(distSq);
             Vector2 nd = toPlayer / dist;
@@ -477,7 +472,7 @@ while (!Raylib.WindowShouldClose())
             if (gunshotSoundReady)
             {
                 Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
+                gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
             }
 
             wandererSpeech = WandererTalk.Pick(WandererTalk.Shoot);
@@ -503,7 +498,7 @@ while (!Raylib.WindowShouldClose())
         }
 
         Vector2 agentDesiredVel = agentWanderDir * wandererSpeed;
-        agentVel = Approach(agentVel, agentDesiredVel, wandererAccel * dt);
+        agentVel = Gameplay.Approach(agentVel, agentDesiredVel, wandererAccel * dt);
 
         Vector2 agentDelta = agentVel * dt;
         agentWorldPos.X += agentDelta.X;
@@ -553,7 +548,7 @@ while (!Raylib.WindowShouldClose())
             float distSqA = toPlayerA.LengthSquared();
             if (distSqA > 40f * 40f
                 && distSqA <= wandererShootMaxRange * wandererShootMaxRange
-                && LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale))
+                && Gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf))
             {
                 float distA = MathF.Sqrt(distSqA);
                 Vector2 ndA = toPlayerA / distA;
@@ -563,7 +558,7 @@ while (!Raylib.WindowShouldClose())
                 if (gunshotSoundReady)
                 {
                     Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                    gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
                 }
             }
             else
@@ -593,12 +588,12 @@ while (!Raylib.WindowShouldClose())
         }
         else
         {
-            aimDir = DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+            aimDir = Gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
         }
     }
     else
     {
-        aimDir = DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+        aimDir = Gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
     }
 
     lastShotDir = aimDir;
@@ -627,7 +622,7 @@ while (!Raylib.WindowShouldClose())
             triggerR2FirePressed = true;
         }
 
-        float rtPressure = TriggerAxisToPressure(
+        float rtPressure = Gameplay.TriggerAxisToPressure(
             Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_TRIGGER));
         if (rtPressure < r2AnalogReleaseBelow)
         {
@@ -649,7 +644,7 @@ while (!Raylib.WindowShouldClose())
         if (gunshotSoundReady)
         {
             Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-            gunshotVoiceNext = (gunshotVoiceNext + 1) % gunshotVoiceCount;
+            gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
         }
 
         Vector2 vel = dir * bulletSpeed;
@@ -665,7 +660,7 @@ while (!Raylib.WindowShouldClose())
         {
             bullets.RemoveAt(i);
         }
-        else if (fromPlayer && wandererAlive && CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
+        else if (fromPlayer && wandererAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
         {
             bullets.RemoveAt(i);
             wandererHitFlashTimer = wandererHitFlashDuration;
@@ -685,7 +680,7 @@ while (!Raylib.WindowShouldClose())
                 wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
             }
         }
-        else if (fromPlayer && agentAlive && CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
+        else if (fromPlayer && agentAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
         {
             bullets.RemoveAt(i);
             agentHitFlashTimer = wandererHitFlashDuration;
@@ -697,7 +692,7 @@ while (!Raylib.WindowShouldClose())
                 agentRespawnTimer = wandererRespawnDelay;
             }
         }
-        else if (!fromPlayer && CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
+        else if (!fromPlayer && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
         {
             bullets.RemoveAt(i);
             playerHitFlashTimer = wandererHitFlashDuration;
@@ -773,7 +768,9 @@ while (!Raylib.WindowShouldClose())
 
         if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
         {
-            DrawWandererSpeechBubble(
+            SpeechBubbleUi.Draw(
+                screenWidth,
+                screenHeight,
                 wanderScreen.X,
                 barTop,
                 wandererSpeech,
@@ -788,7 +785,9 @@ while (!Raylib.WindowShouldClose())
         Vector2 corpseScreen = cameraOffsetSmoothed + wandererWorldPos;
         float corpseCharY = corpseScreen.Y - destH / 2f;
         float corpseBarTop = corpseCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-        DrawWandererSpeechBubble(
+        SpeechBubbleUi.Draw(
+            screenWidth,
+            screenHeight,
             corpseScreen.X,
             corpseBarTop,
             wandererSpeech,
@@ -862,7 +861,7 @@ while (!Raylib.WindowShouldClose())
 
     Raylib.DrawRectangleLinesEx(pBarBg, 1f, new Color((byte)20, (byte)28, (byte)48, (byte)255));
 
-    DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
+    Gameplay.DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
 
     if (gunFlashTimer > 0f)
     {
@@ -903,7 +902,7 @@ while (!Raylib.WindowShouldClose())
         float latePickedLx = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_X) : 0f;
         float latePickedLy = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_Y) : 0f;
 
-        DrawInputReadbackOverlay(
+        InputReadbackOverlay.Draw(
             gamepad,
             stick,
             keyHeld,
@@ -952,7 +951,7 @@ while (!Raylib.WindowShouldClose())
 map.Unload();
 if (gunshotSoundReady)
 {
-    for (int gi = 0; gi < gunshotVoiceCount; gi++)
+    for (int gi = 0; gi < GunshotAudio.VoiceCount; gi++)
     {
         Raylib.UnloadSound(gunshotVoices[gi]);
     }
@@ -966,926 +965,3 @@ Raylib.UnloadTexture(agentTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
 
-static void SetTexturePixelFilter(Texture2D tex) =>
-    Raylib.SetTextureFilter(tex, TextureFilter.TEXTURE_FILTER_POINT);
-
-static Texture2D LoadTexturePixel(string path)
-{
-    Texture2D tex = Raylib.LoadTexture(path);
-    SetTexturePixelFilter(tex);
-    return tex;
-}
-
-/// <summary>Optional <c>SLEUTHRAY_GUNSHOT_WAV</c> (full path to a WAV) overrides the embedded gunshot.</summary>
-static string? ResolveGunshotOverridePath()
-{
-    string? fromEnv = Environment.GetEnvironmentVariable("SLEUTHRAY_GUNSHOT_WAV");
-    if (string.IsNullOrWhiteSpace(fromEnv))
-    {
-        return null;
-    }
-
-    try
-    {
-        string p = Path.GetFullPath(fromEnv.Trim());
-        if (File.Exists(p))
-        {
-            return p;
-        }
-    }
-    catch
-    {
-        // ignore invalid paths
-    }
-
-    return null;
-}
-
-static byte[]? ReadManifestResourceBytesOrNull(Assembly asm, string resourceName)
-{
-    using Stream? stream = asm.GetManifestResourceStream(resourceName);
-    if (stream is null)
-    {
-        return null;
-    }
-
-    using var ms = new MemoryStream();
-    stream.CopyTo(ms);
-    return ms.ToArray();
-}
-
-static void CleanupPartialGunshotVoices(Sound[] voices)
-{
-    for (int j = 0; j < voices.Length; j++)
-    {
-        if (Raylib.IsSoundReady(voices[j]))
-        {
-            Raylib.UnloadSound(voices[j]);
-        }
-
-        voices[j] = default;
-    }
-}
-
-static void ConfigureGunshotVoices(Sound[] voices)
-{
-    for (int i = 0; i < voices.Length; i++)
-    {
-        Raylib.SetSoundVolume(voices[i], 0.88f);
-        Raylib.SetSoundPitch(voices[i], 1f);
-    }
-}
-
-static bool TryLoadGunshotVoicesFromFile(string path, Sound[] voices, out string error)
-{
-    error = "";
-    for (int gi = 0; gi < voices.Length; gi++)
-    {
-        voices[gi] = Raylib.LoadSound(path);
-        if (!Raylib.IsSoundReady(voices[gi]))
-        {
-            error = $"LoadSound failed for voice {gi} ({path})";
-            CleanupPartialGunshotVoices(voices);
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool TryLoadGunshotVoicesFromEmbedded(byte[] wavBytes, Sound[] voices, out string error)
-{
-    error = "";
-    for (int gi = 0; gi < voices.Length; gi++)
-    {
-        // Raylib compares fileType to ".wav" (leading dot); "wav" matches nothing and yields an empty wave.
-        Wave w = Raylib.LoadWaveFromMemory(".wav", wavBytes);
-        if (!Raylib.IsWaveReady(w))
-        {
-            error = $"LoadWaveFromMemory failed for voice {gi}";
-            Raylib.UnloadWave(w);
-            CleanupPartialGunshotVoices(voices);
-            return false;
-        }
-
-        voices[gi] = Raylib.LoadSoundFromWave(w);
-        Raylib.UnloadWave(w);
-        if (!Raylib.IsSoundReady(voices[gi]))
-        {
-            error = $"LoadSoundFromWave failed for voice {gi}";
-            CleanupPartialGunshotVoices(voices);
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool TryInitGunshotVoices(Sound[] voices, out string detail)
-{
-    if (voices.Length != gunshotVoiceCount)
-    {
-        detail = "internal: gunshot voice array length mismatch";
-        return false;
-    }
-
-    string? overridePath = ResolveGunshotOverridePath();
-    if (overridePath is not null)
-    {
-        if (!TryLoadGunshotVoicesFromFile(overridePath, voices, out string fileErr))
-        {
-            detail = fileErr;
-            return false;
-        }
-
-        ConfigureGunshotVoices(voices);
-        detail = $"override file: {overridePath}";
-        return true;
-    }
-
-    byte[]? embedded = ReadManifestResourceBytesOrNull(Assembly.GetExecutingAssembly(), gunshotEmbeddedResourceName);
-    if (embedded is null || embedded.Length == 0)
-    {
-        string names = string.Join(", ", Assembly.GetExecutingAssembly().GetManifestResourceNames());
-        detail = $"missing embedded resource '{gunshotEmbeddedResourceName}'. Manifest: {names}";
-        return false;
-    }
-
-    if (!TryLoadGunshotVoicesFromEmbedded(embedded, voices, out string embErr))
-    {
-        detail = embErr;
-        return false;
-    }
-
-    ConfigureGunshotVoices(voices);
-    detail = $"embedded {gunshotEmbeddedResourceName} ({embedded.Length} bytes)";
-    return true;
-}
-
-static List<string> WrapWandererSpeechLines(string text, int fontSize, float maxWidth)
-{
-    var result = new List<string>();
-    if (string.IsNullOrWhiteSpace(text))
-    {
-        return result;
-    }
-
-    string[] words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-    if (words.Length == 0)
-    {
-        return result;
-    }
-
-    string line = words[0];
-    for (int i = 1; i < words.Length; i++)
-    {
-        string trial = line + " " + words[i];
-        if (Raylib.MeasureText(trial, fontSize) <= maxWidth)
-        {
-            line = trial;
-        }
-        else
-        {
-            result.Add(line);
-            line = words[i];
-        }
-    }
-
-    result.Add(line);
-    return result;
-}
-
-/// <summary>Rounded speech bubble above the wanderer's health bar (screen space).</summary>
-static void DrawWandererSpeechBubble(
-    float centerX,
-    float barTopY,
-    string text,
-    int fontSize,
-    float maxContentWidth,
-    float pad)
-{
-    List<string> lines = WrapWandererSpeechLines(text, fontSize, maxContentWidth);
-    if (lines.Count == 0)
-    {
-        return;
-    }
-
-    float lineStep = fontSize + 6;
-    float maxLinePx = 1f;
-    foreach (string ln in lines)
-    {
-        maxLinePx = MathF.Max(maxLinePx, Raylib.MeasureText(ln, fontSize));
-    }
-
-    float bubbleW = maxLinePx + pad * 2f;
-    float bubbleH = lines.Count * lineStep + pad * 2f;
-    float left = centerX - bubbleW * 0.5f;
-    left = Math.Clamp(left, 6f, screenWidth - bubbleW - 6f);
-    float top = barTopY - bubbleH - 5f;
-    top = Math.Clamp(top, 6f, screenHeight - bubbleH - 6f);
-    var rec = new Rectangle(left, top, bubbleW, bubbleH);
-    Raylib.DrawRectangleRounded(rec, 0.22f, 10, new Color((byte)248, (byte)240, (byte)220, (byte)188));
-    Raylib.DrawRectangleRoundedLines(rec, 0.22f, 10, 2, new Color((byte)42, (byte)36, (byte)28, (byte)210));
-
-    float ty = top + pad;
-    var ink = new Color((byte)22, (byte)18, (byte)14, (byte)255);
-    var shadow = new Color((byte)8, (byte)6, (byte)5, (byte)175);
-    foreach (string ln in lines)
-    {
-        float tw = Raylib.MeasureText(ln, fontSize);
-        int tx = (int)(left + (bubbleW - tw) * 0.5f);
-        int tyi = (int)ty;
-        Raylib.DrawText(ln, tx + 1, tyi + 1, fontSize, shadow);
-        Raylib.DrawText(ln, tx, tyi, fontSize, ink);
-        ty += lineStep;
-    }
-}
-
-/// <summary>Shows raw reads from keyboard and every gamepad slot so we can see which index carries the stick.</summary>
-static void DrawInputReadbackOverlay(
-    int movementGamepad,
-    Vector2 movementStick,
-    bool keyHeld,
-    Vector2 keyInput,
-    bool stickHeld,
-    bool hasInput,
-    Vector2 moveDir,
-    float moveScale,
-    int gamepadMappingsAccepted,
-    string gamepadMappingsDetail,
-    int frameIndex,
-    float lateGp0Lx,
-    float lateGp0Ly,
-    float latePickedLx,
-    float latePickedLy)
-{
-    const int pad = 6;
-    const int font = 10;
-    const int lineH = font + 3;
-    int x = pad;
-    int y = pad;
-    int line = 0;
-    var text = new Color(235, 245, 255, 255);
-    var label = new Color(160, 175, 195, 255);
-    var hi = new Color(120, 255, 160, 255);
-
-    void Row(string s, Color c)
-    {
-        Raylib.DrawText(s, x, y + line * lineH, font, c);
-        line++;
-    }
-
-    // Fixed panel; enough lines for header + mappings + avail + keys + gp[0] API samples + 4 gamepads * 2 + summary.
-    Raylib.DrawRectangle(pad - 3, pad - 3, 560, 418, new Color(0, 0, 0, 170));
-
-    Row("INPUT READBACK (gamepad slots + keys)", label);
-    Row(
-        $"frame={frameIndex}  focused={Raylib.IsWindowFocused()}  minimized={Raylib.IsWindowMinimized()}  hidden={Raylib.IsWindowHidden()}",
-        Raylib.IsWindowFocused() ? text : new Color(255, 200, 120, 255));
-    Row(
-        "PollInputEvents: start of frame + before stick read + after BeginDrawing (see late LX/LY below)",
-        label);
-    Row($"SetGamepadMappings accepted={gamepadMappingsAccepted}  {gamepadMappingsDetail}", label);
-    Row(
-        $"POST BeginDrawing+Poll  gp[0] LX={lateGp0Lx:F3} LY={lateGp0Ly:F3}   pickedGp LX={latePickedLx:F3} LY={latePickedLy:F3}",
-        label);
-    Row(
-        "IsGamepadAvailable: "
-        + $"0={Raylib.IsGamepadAvailable(0)} 1={Raylib.IsGamepadAvailable(1)} 2={Raylib.IsGamepadAvailable(2)} "
-        + $"3={Raylib.IsGamepadAvailable(3)} 4={Raylib.IsGamepadAvailable(4)} 5={Raylib.IsGamepadAvailable(5)}",
-        label);
-    Row(
-        $"keys WASD raw=({keyInput.X:F0},{keyInput.Y:F0}) held={keyHeld}  "
-        + $"W={(Raylib.IsKeyDown(KeyboardKey.KEY_W) ? 1 : 0)} A={(Raylib.IsKeyDown(KeyboardKey.KEY_A) ? 1 : 0)} "
-        + $"S={(Raylib.IsKeyDown(KeyboardKey.KEY_S) ? 1 : 0)} D={(Raylib.IsKeyDown(KeyboardKey.KEY_D) ? 1 : 0)}",
-        text);
-
-    Row("gp[0] API samples (same calls, on-screen)", label);
-    bool g0Avail = Raylib.IsGamepadAvailable(0);
-    Row($"IsGamepadAvailable(0)={g0Avail}", text);
-    string g0Name = g0Avail ? Raylib.GetGamepadName_(0) : "(n/a — slot not available)";
-    if (g0Name.Length > 52)
-    {
-        g0Name = string.Concat(g0Name.AsSpan(0, 49), "...");
-    }
-
-    Row($"GetGamepadName_(0)=\"{g0Name}\"", g0Avail ? text : label);
-    Row(
-        "IsGamepadButtonDown(0,RightFaceDown)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_DOWN)
-        + "  (0,LeftFaceDown)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_DOWN)
-        + "  (0,LeftFaceUp)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_UP),
-        text);
-    Row(
-        "(0,LeftFaceLeft)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_LEFT)
-        + "  (0,LeftFaceRight)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_LEFT_FACE_RIGHT)
-        + "  (0,RightFaceUp)="
-        + Raylib.IsGamepadButtonDown(0, GamepadButton.GAMEPAD_BUTTON_RIGHT_FACE_UP),
-        text);
-    float g0Lx = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
-    float g0Ly = Raylib.GetGamepadAxisMovement(0, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
-    Row($"GetGamepadAxisMovement(0,LEFT_X)={g0Lx:F3}  (0,LEFT_Y)={g0Ly:F3}", text);
-
-    for (int g = 0; g < 4; g++)
-    {
-        bool ok = Raylib.IsGamepadAvailable(g);
-        int axCount = Raylib.GetGamepadAxisCount(g);
-        string name = ok ? Raylib.GetGamepadName_(g) : "";
-        if (name.Length > 36)
-        {
-            name = string.Concat(name.AsSpan(0, 33), "...");
-        }
-
-        float lx = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_X);
-        float ly = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_Y);
-        float rx = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_X);
-        float ry = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_Y);
-        float lt = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_LEFT_TRIGGER);
-        float rt = Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_TRIGGER);
-
-        Color c0 = ok ? text : label;
-        Row($"gp[{g}] available={ok} axisCount={axCount} name=\"{name}\"", c0);
-        Row(
-            $"     LX={lx:F3} LY={ly:F3}  RX={rx:F3} RY={ry:F3}  LT={lt:F3} RT={rt:F3}",
-            ok ? text : label);
-    }
-
-    Row(
-        $"MOVE CODE: pickedGp={movementGamepad} stick=({movementStick.X:F3},{movementStick.Y:F3}) "
-        + $"stickHeld={stickHeld} hasInput={hasInput}",
-        label);
-    Row(
-        $"          moveDir=({moveDir.X:F3},{moveDir.Y:F3}) moveScale={moveScale:F3}",
-        hasInput ? hi : text);
-
-    int lastBtn = Raylib.GetGamepadButtonPressed();
-    if (lastBtn >= 0)
-    {
-        Row($"last gamepad button pressed (enum value)={lastBtn}", text);
-    }
-}
-
-/// <summary>Loads SDL_GameControllerDB-format strings into GLFW via Raylib so macOS Xbox pads get correct axis/button mapping.</summary>
-static (int accepted, string detail) TryLoadGamepadMappings()
-{
-    string baseDir = AppContext.BaseDirectory;
-    string full = Path.Combine(baseDir, "assets", "gamecontrollerdb.txt");
-    string subset = Path.Combine(baseDir, "assets", "gamecontrollerdb_xbox_mac.txt");
-
-    if (File.Exists(full))
-    {
-        string body = FilterGamepadMappingText(File.ReadAllText(full));
-        int n = Raylib.SetGamepadMappings(body);
-        return (n, "assets/gamecontrollerdb.txt");
-    }
-
-    if (File.Exists(subset))
-    {
-        string body = FilterGamepadMappingText(File.ReadAllText(subset));
-        int n = Raylib.SetGamepadMappings(body);
-        return (n, "assets/gamecontrollerdb_xbox_mac.txt");
-    }
-
-    return (0, "no assets/gamecontrollerdb*.txt");
-}
-
-static string FilterGamepadMappingText(string raw)
-{
-    string[] lines = raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-    var kept = new List<string>(lines.Length);
-    foreach (string line in lines)
-    {
-        string t = line.Trim();
-        if (t.Length == 0 || t.StartsWith('#'))
-        {
-            continue;
-        }
-
-        kept.Add(line.TrimEnd());
-    }
-
-    return string.Join('\n', kept);
-}
-
-/// <summary>Maps GLFW/Raylib trigger axis (often 0..1 or -1..1) to 0..1 pressure for R2/L2-style axes.</summary>
-/// <summary>Keyboard / coasting aim when the right stick is centered or no gamepad.</summary>
-static Vector2 DefaultAimDirFromMovement(bool hasInput, Vector2 moveDir, Vector2 playerVel, int currentRow)
-{
-    if (hasInput)
-    {
-        return moveDir;
-    }
-
-    if (playerVel.LengthSquared() > 4f)
-    {
-        return Vector2.Normalize(playerVel);
-    }
-
-    return currentRow switch
-    {
-        0 => new Vector2(0f, 1f),
-        1 => new Vector2(-1f, 0f),
-        2 => new Vector2(1f, 0f),
-        3 => new Vector2(0f, -1f),
-        _ => new Vector2(0f, 1f)
-    };
-}
-
-static void DrawAimReticle(Vector2 playerScreenCenter, Vector2 aimDir, float distancePx, float armPx, float thick)
-{
-    if (aimDir.LengthSquared() < 1e-6f)
-    {
-        return;
-    }
-
-    Vector2 n = Vector2.Normalize(aimDir);
-    Vector2 c = playerScreenCenter + n * distancePx;
-    Vector2 perp = new(-n.Y, n.X);
-    var col = new Color((byte)255, (byte)255, (byte)230, (byte)255);
-    Raylib.DrawLineEx(c - n * armPx, c + n * armPx, thick, col);
-    Raylib.DrawLineEx(c - perp * armPx, c + perp * armPx, thick, col);
-}
-
-static float TriggerAxisToPressure(float raw)
-{
-    if (raw < 0f)
-    {
-        return Math.Clamp((raw + 1f) * 0.5f, 0f, 1f);
-    }
-
-    return Math.Clamp(raw, 0f, 1f);
-}
-
-static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
-{
-    Vector2 delta = target - current;
-    float dist = delta.Length();
-    if (dist <= maxDelta || dist == 0f)
-    {
-        return target;
-    }
-
-    return current + delta / dist * maxDelta;
-}
-
-/// <summary>Uses <paramref name="preferred"/> if clear; otherwise nearest tile center in expanding Chebyshev rings.</summary>
-static Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH)
-{
-    if (!m.OverlapsBlockingTile(preferred, scale, halfW, halfH))
-    {
-        return preferred;
-    }
-
-    float tw = m.TileWidth * scale;
-    float th = m.TileHeight * scale;
-    int px = (int)MathF.Floor(preferred.X / tw);
-    int py = (int)MathF.Floor(preferred.Y / th);
-    px = Math.Clamp(px, 0, m.Width - 1);
-    py = Math.Clamp(py, 0, m.Height - 1);
-
-    int maxR = m.Width + m.Height + 2;
-    for (int r = 0; r <= maxR; r++)
-    {
-        for (int dx = -r; dx <= r; dx++)
-        {
-            for (int dy = -r; dy <= r; dy++)
-            {
-                if (r != 0 && Math.Abs(dx) != r && Math.Abs(dy) != r)
-                {
-                    continue;
-                }
-
-                int tx = px + dx;
-                int ty = py + dy;
-                if (tx < 0 || ty < 0 || tx >= m.Width || ty >= m.Height)
-                {
-                    continue;
-                }
-
-                var center = new Vector2((tx + 0.5f) * tw, (ty + 0.5f) * th);
-                if (!m.OverlapsBlockingTile(center, scale, halfW, halfH))
-                {
-                    return center;
-                }
-            }
-        }
-    }
-
-    return preferred;
-}
-
-/// <summary>Ray from NPC to player: no blocking tile between them (same probe size as bullets).</summary>
-static bool LineOfSightClear(TileMap map, Vector2 from, Vector2 to, float mapScale)
-{
-    Vector2 d = to - from;
-    float len = d.Length();
-    if (len < 24f)
-    {
-        return true;
-    }
-
-    Vector2 dir = d / len;
-    const float step = 14f;
-    float start = 20f;
-    float end = len - 24f;
-    if (end <= start)
-    {
-        return true;
-    }
-
-    for (float s = start; s < end; s += step)
-    {
-        Vector2 p = from + dir * s;
-        if (map.OverlapsBlockingTile(p, mapScale, bulletHitHalf, bulletHitHalf))
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH)
-{
-    float nx = Math.Clamp(circleCenter.X, rectCenter.X - halfW, rectCenter.X + halfW);
-    float ny = Math.Clamp(circleCenter.Y, rectCenter.Y - halfH, rectCenter.Y + halfH);
-    float dx = circleCenter.X - nx;
-    float dy = circleCenter.Y - ny;
-    return dx * dx + dy * dy <= radius * radius;
-}
-
-sealed class TileMap
-{
-    public required int Width { get; init; }
-    public required int Height { get; init; }
-    public required int TileWidth { get; init; }
-    public required int TileHeight { get; init; }
-
-    public required int TilesetFirstGid { get; init; }
-    public required int TilesetColumns { get; init; }
-    public required Texture2D TilesetTexture { get; init; }
-
-    /// <summary>CPU copy of the tileset for alpha tests (unloaded with the texture).</summary>
-    public required Image AtlasImage { get; init; }
-
-    /// <summary>Tile GID grids per layer, bottom-to-top (same order as in the TMX).</summary>
-    public required int[][] LayerGids { get; init; }
-
-    public static TileMap LoadFromTmx(string tmxPath)
-    {
-        var doc = XDocument.Load(tmxPath);
-        XElement mapEl = doc.Root ?? throw new InvalidOperationException("TMX missing <map> root.");
-
-        int width = (int)mapEl.Attribute("width")!;
-        int height = (int)mapEl.Attribute("height")!;
-        int tileWidth = (int)mapEl.Attribute("tilewidth")!;
-        int tileHeight = (int)mapEl.Attribute("tileheight")!;
-
-        XElement tilesetEl = mapEl.Element("tileset") ?? throw new InvalidOperationException("TMX missing <tileset>.");
-        int firstGid = (int)tilesetEl.Attribute("firstgid")!;
-        string tsxSource = (string?)tilesetEl.Attribute("source") ?? throw new InvalidOperationException("TMX tileset missing source.");
-
-        string tmxDir = Path.GetDirectoryName(tmxPath) ?? ".";
-        string tsxPath = Path.GetFullPath(Path.Combine(tmxDir, tsxSource));
-
-        (int columns, string imagePath) = LoadTsx(tsxPath);
-        Texture2D texture = Raylib.LoadTexture(imagePath);
-        Image atlasImage = Raylib.LoadImageFromTexture(texture);
-
-        var layerList = new List<int[]>();
-        foreach (XElement layerEl in mapEl.Elements("layer"))
-        {
-            XElement dataEl = layerEl.Element("data") ?? throw new InvalidOperationException($"Layer '{(string?)layerEl.Attribute("name")}' missing <data>.");
-            string encoding = (string?)dataEl.Attribute("encoding") ?? "";
-            if (!string.Equals(encoding, "csv", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new NotSupportedException($"Unsupported TMX encoding '{encoding}' in layer '{(string?)layerEl.Attribute("name")}'. Expected csv.");
-            }
-
-            string csv = dataEl.Value;
-            layerList.Add(ParseCsvGids(csv, width * height));
-        }
-
-        if (layerList.Count == 0)
-        {
-            throw new InvalidOperationException("TMX missing <layer> elements.");
-        }
-
-        return new TileMap
-        {
-            Width = width,
-            Height = height,
-            TileWidth = tileWidth,
-            TileHeight = tileHeight,
-            TilesetFirstGid = firstGid,
-            TilesetColumns = columns,
-            TilesetTexture = texture,
-            AtlasImage = atlasImage,
-            LayerGids = layerList.ToArray()
-        };
-    }
-
-    /// <summary>Tiled may set flip/mirror flags in the high bits of a GID; mask them off for logic.</summary>
-    public static int ClearGidFlags(int gid) => gid & 0x1FFFFFFF;
-
-    /// <summary>Layer tile GID that counts as a solid wall (from your map data).</summary>
-    public const int WallTileGid = 97;
-
-    public static bool IsBlockingGid(int gid) => gid == WallTileGid;
-
-    /// <summary>Pixels with alpha above this count as solid for collision.</summary>
-    public const byte CollisionAlphaThreshold = 32;
-
-    /// <summary>Returns true if the axis-aligned box (centered in world pixels) overlaps opaque pixels of any blocking tile.</summary>
-    public bool OverlapsBlockingTile(Vector2 centerWorld, float scale, float halfW, float halfH)
-    {
-        float tw = TileWidth * scale;
-        float th = TileHeight * scale;
-
-        float left = centerWorld.X - halfW;
-        float top = centerWorld.Y - halfH;
-        float right = centerWorld.X + halfW;
-        float bottom = centerWorld.Y + halfH;
-
-        int tx0 = (int)MathF.Floor(left / tw);
-        int ty0 = (int)MathF.Floor(top / th);
-        int tx1 = (int)MathF.Floor((right - 1e-4f) / tw);
-        int ty1 = (int)MathF.Floor((bottom - 1e-4f) / th);
-
-        for (int ty = ty0; ty <= ty1; ty++)
-        {
-            for (int tx = tx0; tx <= tx1; tx++)
-            {
-                if (tx < 0 || ty < 0 || tx >= Width || ty >= Height)
-                {
-                    return true;
-                }
-
-                int idx = ty * Width + tx;
-                int n = LayerGids.Length;
-
-                if (n == 1)
-                {
-                    int gid = ClearGidFlags(LayerGids[0][idx]);
-                    if (IsBlockingGid(gid) && TileSpriteOpaqueOverlapsWorldRect(gid, tx, ty, left, top, right, bottom, scale))
-                    {
-                        return true;
-                    }
-                }
-                else
-                {
-                    for (int li = 0; li < n - 1; li++)
-                    {
-                        int gid = ClearGidFlags(LayerGids[li][idx]);
-                        if (IsBlockingGid(gid) && TileSpriteOpaqueOverlapsWorldRect(gid, tx, ty, left, top, right, bottom, scale))
-                        {
-                            return true;
-                        }
-                    }
-
-                    int overlayGid = ClearGidFlags(LayerGids[n - 1][idx]);
-                    if (overlayGid != 0 && TileSpriteOpaqueOverlapsWorldRect(overlayGid, tx, ty, left, top, right, bottom, scale))
-                    {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>True if any tile pixel under the intersection of the tile and the world AABB is opaque enough to block.</summary>
-    private bool TileSpriteOpaqueOverlapsWorldRect(int gid, int tx, int ty, float pLeft, float pTop, float pRight, float pBottom, float scale)
-    {
-        int tileId = gid - TilesetFirstGid;
-        if (tileId < 0)
-        {
-            return false;
-        }
-
-        float tw = TileWidth * scale;
-        float th = TileHeight * scale;
-        float tileWorldLeft = tx * tw;
-        float tileWorldTop = ty * th;
-
-        float il = MathF.Max(pLeft, tileWorldLeft);
-        float ir = MathF.Min(pRight, tileWorldLeft + tw);
-        float it = MathF.Max(pTop, tileWorldTop);
-        float ib = MathF.Min(pBottom, tileWorldTop + th);
-        if (il >= ir || it >= ib)
-        {
-            return false;
-        }
-
-        int sx0 = (int)MathF.Floor((il - tileWorldLeft) / scale);
-        int sx1 = (int)MathF.Floor((ir - tileWorldLeft - 1e-4f) / scale);
-        int sy0 = (int)MathF.Floor((it - tileWorldTop) / scale);
-        int sy1 = (int)MathF.Floor((ib - tileWorldTop - 1e-4f) / scale);
-
-        sx0 = Math.Clamp(sx0, 0, TileWidth - 1);
-        sx1 = Math.Clamp(sx1, 0, TileWidth - 1);
-        sy0 = Math.Clamp(sy0, 0, TileHeight - 1);
-        sy1 = Math.Clamp(sy1, 0, TileHeight - 1);
-
-        int atlasBaseX = (tileId % TilesetColumns) * TileWidth;
-        int atlasBaseY = (tileId / TilesetColumns) * TileHeight;
-
-        for (int sy = sy0; sy <= sy1; sy++)
-        {
-            for (int sx = sx0; sx <= sx1; sx++)
-            {
-                int ax = atlasBaseX + sx;
-                int ay = atlasBaseY + sy;
-                if (ax < 0 || ay < 0 || ax >= AtlasImage.Width || ay >= AtlasImage.Height)
-                {
-                    continue;
-                }
-
-                Color c = Raylib.GetImageColor(AtlasImage, ax, ay);
-                if (c.A > CollisionAlphaThreshold)
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Draws all tile layers except the last (when there are multiple layers). Single-layer maps draw that layer only.</summary>
-    public void Draw(float scale, Vector2 offset)
-    {
-        int n = LayerGids.Length;
-        int count = n > 1 ? n - 1 : n;
-        for (int li = 0; li < count; li++)
-        {
-            DrawLayer(li, scale, offset);
-        }
-    }
-
-    /// <summary>Draws the topmost tile layer on top of sprites (only when the map has 2+ layers).</summary>
-    public void DrawOverlay(float scale, Vector2 offset)
-    {
-        if (LayerGids.Length > 1)
-        {
-            DrawLayer(LayerGids.Length - 1, scale, offset);
-        }
-    }
-
-    private void DrawLayer(int layerIndex, float scale, Vector2 offset)
-    {
-        int[] layer = LayerGids[layerIndex];
-        for (int y = 0; y < Height; y++)
-        {
-            for (int x = 0; x < Width; x++)
-            {
-                int gid = ClearGidFlags(layer[y * Width + x]);
-                if (gid == 0)
-                {
-                    continue;
-                }
-
-                int tileId = gid - TilesetFirstGid;
-                if (tileId < 0)
-                {
-                    continue;
-                }
-
-                int srcX = (tileId % TilesetColumns) * TileWidth;
-                int srcY = (tileId / TilesetColumns) * TileHeight;
-                var src = new Rectangle(srcX, srcY, TileWidth, TileHeight);
-
-                float destX = offset.X + x * TileWidth * scale;
-                float destY = offset.Y + y * TileHeight * scale;
-                var dest = new Rectangle(destX, destY, TileWidth * scale, TileHeight * scale);
-
-                Raylib.DrawTexturePro(TilesetTexture, src, dest, Vector2.Zero, 0f, Color.WHITE);
-            }
-        }
-    }
-
-    public void Unload()
-    {
-        Raylib.UnloadImage(AtlasImage);
-        Raylib.UnloadTexture(TilesetTexture);
-    }
-
-    private static (int columns, string imagePath) LoadTsx(string tsxPath)
-    {
-        var doc = XDocument.Load(tsxPath);
-        XElement tsEl = doc.Root ?? throw new InvalidOperationException("TSX missing <tileset> root.");
-        int columns = (int)tsEl.Attribute("columns")!;
-
-        XElement imageEl = tsEl.Element("image") ?? throw new InvalidOperationException("TSX missing <image>.");
-        string imageSource = (string?)imageEl.Attribute("source") ?? throw new InvalidOperationException("TSX image missing source.");
-
-        // Prefer the copy we imported into the game if it exists, otherwise resolve relative to the TSX.
-        string importedInProject = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../assets/tiles/atlas_16x.png"));
-        if (File.Exists(importedInProject))
-        {
-            return (columns, importedInProject);
-        }
-
-        string importedAtRepoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../assets/tiles/atlas_16x.png"));
-        if (File.Exists(importedAtRepoRoot))
-        {
-            return (columns, importedAtRepoRoot);
-        }
-
-        string tsxDir = Path.GetDirectoryName(tsxPath) ?? ".";
-        string imagePath = Path.GetFullPath(Path.Combine(tsxDir, imageSource));
-        return (columns, imagePath);
-    }
-
-    private static int[] ParseCsvGids(string csv, int expectedCount)
-    {
-        var gids = new int[expectedCount];
-        int i = 0;
-        foreach (string part in csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (i >= expectedCount)
-            {
-                break;
-            }
-
-            gids[i++] = int.Parse(part);
-        }
-
-        if (i != expectedCount)
-        {
-            throw new InvalidOperationException($"TMX CSV had {i} entries, expected {expectedCount}.");
-        }
-
-        return gids;
-    }
-}
-
-file static class WandererTalk
-{
-    const string EmbeddedResourceName = "wanderer_talk.json";
-
-    public static string[] Idle { get; private set; } = [];
-    public static string[] Shoot { get; private set; } = [];
-    public static string[] Hurt { get; private set; } = [];
-    public static string[] Spawn { get; private set; } = [];
-    public static string[] Death { get; private set; } = [];
-
-    public static void InitFromEmbeddedResource()
-    {
-        Assembly asm = Assembly.GetExecutingAssembly();
-        using Stream? stream = asm.GetManifestResourceStream(EmbeddedResourceName);
-        if (stream is null)
-        {
-            string names = string.Join(", ", asm.GetManifestResourceNames());
-            throw new InvalidOperationException(
-                $"Missing embedded resource '{EmbeddedResourceName}'. Manifest names: {names}");
-        }
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        WandererTalkJson? data = JsonSerializer.Deserialize<WandererTalkJson>(stream, options);
-        if (data is null)
-        {
-            throw new InvalidOperationException($"{EmbeddedResourceName}: JSON deserialization returned null.");
-        }
-
-        Idle = RequireLines(data.Idle, nameof(data.Idle));
-        Shoot = RequireLines(data.Shoot, nameof(data.Shoot));
-        Hurt = RequireLines(data.Hurt, nameof(data.Hurt));
-        Spawn = RequireLines(data.Spawn, nameof(data.Spawn));
-        Death = RequireLines(data.Death, nameof(data.Death));
-    }
-
-    static string[] RequireLines(string[]? lines, string fieldName)
-    {
-        if (lines is null || lines.Length == 0)
-        {
-            throw new InvalidOperationException($"{EmbeddedResourceName}: '{fieldName}' must be a non-empty string array.");
-        }
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (string.IsNullOrWhiteSpace(lines[i]))
-            {
-                throw new InvalidOperationException($"{EmbeddedResourceName}: '{fieldName}[{i}]' is empty.");
-            }
-        }
-
-        return lines;
-    }
-
-    public static string Pick(string[] lines) => lines[Random.Shared.Next(lines.Length)];
-
-    sealed class WandererTalkJson
-    {
-        public string[]? Idle { get; set; }
-        public string[]? Shoot { get; set; }
-        public string[]? Hurt { get; set; }
-        public string[]? Spawn { get; set; }
-        public string[]? Death { get; set; }
-    }
-}
