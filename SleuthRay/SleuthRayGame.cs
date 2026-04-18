@@ -158,7 +158,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const int catIdleRow = 12;
         const int catIdleFrameCount = 8;
         const float catIdleFrameSeconds = 0.14f;
-        const float catDrawScale = 2f;
+        const float catDrawScale = 1f;
         Vector2 catWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH);
         int catIdleFrameIndex = 0;
         float catIdleAnimTimer = 0f;
