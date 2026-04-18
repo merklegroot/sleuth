@@ -74,7 +74,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
         bool prevHasInput = false;
         bool prevSpaceHeld = false;
         bool prevGraveHeld = false;
+        bool prevTabHeld = false;
         bool prevEscapeHeld = false;
+        bool[] prevGamepadBackHeld = new bool[4];
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
         bool[] r2AnalogArmed = [true, true, true, true];
         bool[] prevRightTrigger1Held = new bool[4];
@@ -180,11 +182,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             float dt = Raylib.GetFrameTime();
 
-            bool statsMenuToggle = Raylib.IsKeyPressed(KeyboardKey.KEY_TAB);
+            bool tabHeld = Raylib.IsKeyDown(KeyboardKey.KEY_TAB);
+            // IsKeyPressed is cleared by extra PollInputEvents this frame; IsKeyDown + edge matches grave / Esc.
+            bool statsMenuToggle = tabHeld && !prevTabHeld;
             for (int g = 0; g < 4; g++)
             {
-                if (Raylib.IsGamepadAvailable(g)
-                    && Raylib.IsGamepadButtonPressed(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_LEFT))
+                if (!Raylib.IsGamepadAvailable(g))
+                {
+                    continue;
+                }
+
+                bool backHeld = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_LEFT);
+                if (backHeld && !prevGamepadBackHeld[g])
                 {
                     statsMenuToggle = true;
                     break;
@@ -979,6 +988,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             prevHasInput = hasInput;
             prevSpaceHeld = spaceHeld;
             prevGraveHeld = graveHeld;
+            prevTabHeld = tabHeld;
             prevEscapeHeld = escapeHeld;
 
             for (int g = 0; g < 4; g++)
@@ -987,12 +997,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     prevRightTrigger1Held[g] = false;
                     prevRightTrigger2Held[g] = false;
+                    prevGamepadBackHeld[g] = false;
                     r2AnalogArmed[g] = true;
                     continue;
                 }
 
                 prevRightTrigger1Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
                 prevRightTrigger2Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
+                prevGamepadBackHeld[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_LEFT);
             }
         }
 
