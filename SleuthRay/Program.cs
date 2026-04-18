@@ -19,19 +19,12 @@ Raylib.InitAudioDevice();
 (int gamepadMappingsAccepted, string gamepadMappingsDetail) = TryLoadGamepadMappings();
 
 TileMap map = TileMap.LoadFromTmx(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../tiled/map.tmx")));
-Raylib.SetTextureFilter(map.TilesetTexture, TextureFilter.TEXTURE_FILTER_POINT);
+SetTexturePixelFilter(map.TilesetTexture);
 
-Texture2D characterTexture = Raylib.LoadTexture("assets/characters/character_1_frame16x20.png");
-Raylib.SetTextureFilter(characterTexture, TextureFilter.TEXTURE_FILTER_POINT);
-
-Texture2D wandererTexture = Raylib.LoadTexture("assets/characters/character_4_frame16x20.png");
-Raylib.SetTextureFilter(wandererTexture, TextureFilter.TEXTURE_FILTER_POINT);
-
-Texture2D agentTexture = Raylib.LoadTexture("assets/characters/character_9_frame16x20.png");
-Raylib.SetTextureFilter(agentTexture, TextureFilter.TEXTURE_FILTER_POINT);
-
-Texture2D gunTexture = Raylib.LoadTexture("assets/weapons/1Revolver01.png");
-Raylib.SetTextureFilter(gunTexture, TextureFilter.TEXTURE_FILTER_POINT);
+Texture2D characterTexture = LoadTexturePixel("assets/characters/character_1_frame16x20.png");
+Texture2D wandererTexture = LoadTexturePixel("assets/characters/character_4_frame16x20.png");
+Texture2D agentTexture = LoadTexturePixel("assets/characters/character_9_frame16x20.png");
+Texture2D gunTexture = LoadTexturePixel("assets/weapons/1Revolver01.png");
 
 /// <summary>Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.</summary>
 const int gunshotVoiceCount = 6;
@@ -972,6 +965,16 @@ Raylib.UnloadTexture(wandererTexture);
 Raylib.UnloadTexture(agentTexture);
 Raylib.UnloadTexture(characterTexture);
 Raylib.CloseWindow();
+
+static void SetTexturePixelFilter(Texture2D tex) =>
+    Raylib.SetTextureFilter(tex, TextureFilter.TEXTURE_FILTER_POINT);
+
+static Texture2D LoadTexturePixel(string path)
+{
+    Texture2D tex = Raylib.LoadTexture(path);
+    SetTexturePixelFilter(tex);
+    return tex;
+}
 
 /// <summary>Optional <c>SLEUTHRAY_GUNSHOT_WAV</c> (full path to a WAV) overrides the embedded gunshot.</summary>
 static string? ResolveGunshotOverridePath()
