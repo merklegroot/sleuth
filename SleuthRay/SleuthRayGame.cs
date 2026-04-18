@@ -98,6 +98,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float bulletSpawnPad = 22f;
         const float bulletHitHalf = 1.5f;
         const float bulletRadius = 2.5f;
+        // Player shots are rendered as tiny cats (hit detection unchanged).
+        const float catBulletVisualScale = 0.95f;
         // Revolver art faces +X; rotation aligns barrel with aim.
         const float gunSpriteScale = 2.5f;
         const float Rad2Deg = 180f / MathF.PI;
@@ -1085,9 +1087,23 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = 0; i < bullets.Count; i++)
             {
-                Vector2 screen = cameraOffsetSmoothed + bullets[i].Pos;
-                Color bCol = bullets[i].FromPlayer ? Color.YELLOW : new Color((byte)255, (byte)140, (byte)60, (byte)255);
-                Raylib.DrawCircleV(screen, bulletRadius, bCol);
+                (Vector2 bPos, Vector2 bVel, bool bFromPlayer) = bullets[i];
+                Vector2 screen = cameraOffsetSmoothed + bPos;
+                if (bFromPlayer)
+                {
+                    float catRotDeg = MathF.Atan2(bVel.Y, bVel.X) * Rad2Deg;
+                    float cbW = catFrameSize * catBulletVisualScale;
+                    float cbH = catFrameSize * catBulletVisualScale;
+                    var catBulletSrc = new Rectangle(0f, catIdleRow * catFrameSize, catFrameSize, catFrameSize);
+                    var catBulletDest = new Rectangle(screen.X - cbW * 0.5f, screen.Y - cbH * 0.5f, cbW, cbH);
+                    var catBulletOrigin = new Vector2(cbW * 0.5f, cbH * 0.5f);
+                    Raylib.DrawTexturePro(catTexture, catBulletSrc, catBulletDest, catBulletOrigin, catRotDeg, Color.WHITE);
+                }
+                else
+                {
+                    Color bCol = new Color((byte)255, (byte)140, (byte)60, (byte)255);
+                    Raylib.DrawCircleV(screen, bulletRadius, bCol);
+                }
             }
 
             const int hintFont = 22;
