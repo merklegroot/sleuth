@@ -896,6 +896,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         playerHealth = playerMaxHealth;
                         playerHitFlashTimer = 0f;
                         bullets.Clear();
+                        break;
                     }
                 }
                 else
