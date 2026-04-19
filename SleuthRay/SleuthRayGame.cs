@@ -910,6 +910,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
             // Draw map (16x16 tiles) behind UI/sprites.
             map.Draw(scale: mapScale, offset: cameraOffsetSmoothed);
 
+            const float spriteBoundsThick = 1.25f;
+            var spriteBoundsCol = new Color((byte)110, (byte)255, (byte)170, (byte)255);
+
             int currentFrame = frameCycle[cycleIndex];
             var src = new Rectangle(currentFrame * frameWidth, currentRow * frameHeight, frameWidth, frameHeight);
 
@@ -938,6 +941,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, wanderTint);
+                Raylib.DrawRectangleLinesEx(wanderDest, spriteBoundsThick, spriteBoundsCol);
 
                 float barW = destW - wandererHealthBarPadX * 2f;
                 float barLeft = wanderScreen.X - barW * 0.5f;
@@ -1002,6 +1006,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Raylib.DrawTexturePro(agentTexture, agentSrc, agentDest, Vector2.Zero, 0f, agentTint);
+                Raylib.DrawRectangleLinesEx(agentDest, spriteBoundsThick, spriteBoundsCol);
 
                 float agentBarW = destW - wandererHealthBarPadX * 2f;
                 float agentBarLeft = agentScreen.X - agentBarW * 0.5f;
@@ -1028,6 +1033,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             float catTop = catScreen.Y - catH * 0.5f;
             var catDest = new Rectangle(catLeft, catTop, catW, catH);
             Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
+            Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
 
             float charX = playerScreenPos.X - destW / 2f;
             float charY = playerScreenPos.Y - destH / 2f;
@@ -1044,6 +1050,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
+            Raylib.DrawRectangleLinesEx(dest, spriteBoundsThick, spriteBoundsCol);
 
             float pBarW = destW - wandererHealthBarPadX * 2f;
             float pBarLeft = playerScreenPos.X - pBarW * 0.5f;
@@ -1081,6 +1088,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 var gOrigin = new Vector2(gw * 0.5f, gh * 0.5f);
                 var gDest = new Rectangle(gunPivot.X, gunPivot.Y, gw, gh);
                 Raylib.DrawTexturePro(gunTexture, gSrc, gDest, gOrigin, rotDeg, Color.WHITE);
+                Raylib.DrawRectangleLinesEx(gDest, spriteBoundsThick, spriteBoundsCol);
             }
 
             map.DrawOverlay(scale: mapScale, offset: cameraOffsetSmoothed);
@@ -1098,11 +1106,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     var catBulletDest = new Rectangle(screen.X - cbW * 0.5f, screen.Y - cbH * 0.5f, cbW, cbH);
                     var catBulletOrigin = new Vector2(cbW * 0.5f, cbH * 0.5f);
                     Raylib.DrawTexturePro(catTexture, catBulletSrc, catBulletDest, catBulletOrigin, catRotDeg, Color.WHITE);
+                    Raylib.DrawRectangleLinesEx(catBulletDest, spriteBoundsThick, spriteBoundsCol);
                 }
                 else
                 {
                     Color bCol = new Color((byte)255, (byte)140, (byte)60, (byte)255);
                     Raylib.DrawCircleV(screen, bulletRadius, bCol);
+                    float br = bulletRadius;
+                    var enemyBulletBounds = new Rectangle(screen.X - br, screen.Y - br, br * 2f, br * 2f);
+                    Raylib.DrawRectangleLinesEx(enemyBulletBounds, spriteBoundsThick, spriteBoundsCol);
                 }
             }
 
