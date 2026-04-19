@@ -1102,10 +1102,17 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Vector2 screen = cameraOffsetSmoothed + bPos;
                 if (bFromPlayer)
                 {
-                    float catRotDeg = MathF.Atan2(bVel.Y, bVel.X) * Rad2Deg;
+                    // Same as the gun: mirror in the left half-plane, atan2 on reflected X so diagonals stay sane and the sprite stays upright.
+                    bool mirrorCatBullet = bVel.X < 0f;
+                    float ax = mirrorCatBullet ? -bVel.X : bVel.X;
+                    float ay = mirrorCatBullet ? -bVel.Y : bVel.Y;
+                    float catRotDeg = MathF.Atan2(ay, ax) * Rad2Deg;
                     float cbW = catFrameSize * catBulletVisualScale;
                     float cbH = catFrameSize * catBulletVisualScale;
-                    var catBulletSrc = new Rectangle(0f, catBulletSpriteRow * catFrameSize, catFrameSize, catFrameSize);
+                    float srcY = catBulletSpriteRow * catFrameSize;
+                    var catBulletSrc = mirrorCatBullet
+                        ? new Rectangle(catFrameSize, srcY, -catFrameSize, catFrameSize)
+                        : new Rectangle(0f, srcY, catFrameSize, catFrameSize);
                     // With non-zero origin, dest.X/Y are the pivot in screen space (same as the gun), not the quad top-left.
                     var catBulletDest = new Rectangle(screen.X, screen.Y, cbW, cbH);
                     var catBulletOrigin = new Vector2(cbW * 0.5f, cbH * 0.5f);
