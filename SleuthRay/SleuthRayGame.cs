@@ -177,15 +177,29 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float catIdleWaitMax = 3.8f;
         const float catWalkTimeMin = 0.45f;
         const float catWalkTimeMax = 1.65f;
-        Vector2 catWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH);
-        Vector2 catHomePos = catWorldPos;
-        bool catIsWalking = false;
-        float catBehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f;
-        int catWalkFacingSign = 1;
-        float catWalkTimeLeft = 0f;
-        int catFrameIndex = 0;
-        float catAnimTimer = 0f;
-        int catDrawRow = catIdleRow;
+        const int maxWanderingCats = 32;
+        var catWanderParams = new CatWanderParams
+        {
+            IdleRow = catIdleRow,
+            IdleFrameCount = catIdleFrameCount,
+            IdleFrameSeconds = catIdleFrameSeconds,
+            WalkLeftRow = catWalkLeftRow,
+            WalkRightRow = catWalkRightRow,
+            WalkFrameCount = catWalkFrameCount,
+            WalkFrameSeconds = catWalkFrameSeconds,
+            HitHalfW = catHitHalfW,
+            HitHalfH = catHitHalfH,
+            WalkSpeed = catWalkSpeed,
+            LeashRadius = catLeashRadius,
+            IdleWaitMin = catIdleWaitMin,
+            IdleWaitMax = catIdleWaitMax,
+            WalkTimeMin = catWalkTimeMin,
+            WalkTimeMax = catWalkTimeMax,
+        };
+        var wanderingCats = new List<WanderingCat>(maxWanderingCats);
+        wanderingCats.Add(WanderingCat.SpawnAt(
+            Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
+            catIdleRow));
 
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
@@ -374,88 +388,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
             playerWorldPos.X = Math.Clamp(playerWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
             playerWorldPos.Y = Math.Clamp(playerWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
 
-            if (!catIsWalking)
+            for (int ci = 0; ci < wanderingCats.Count; ci++)
             {
-                catDrawRow = catIdleRow;
-                catAnimTimer += dt;
-                while (catAnimTimer >= catIdleFrameSeconds)
-                {
-                    catAnimTimer -= catIdleFrameSeconds;
-                    catFrameIndex = (catFrameIndex + 1) % catIdleFrameCount;
-                }
-
-                catBehaviorTimer -= dt;
-                if (catBehaviorTimer <= 0f)
-                {
-                    if (Random.Shared.NextSingle() < 0.58f)
-                    {
-                        catIsWalking = true;
-                        float toHomeX = catHomePos.X - catWorldPos.X;
-                        int towardHome = toHomeX > 6f ? 1 : (toHomeX < -6f ? -1 : 0);
-                        if (towardHome != 0 && Random.Shared.NextSingle() < 0.35f)
-                        {
-                            catWalkFacingSign = towardHome;
-                        }
-                        else
-                        {
-                            catWalkFacingSign = Random.Shared.Next(0, 2) == 0 ? -1 : 1;
-                        }
-
-                        catWalkTimeLeft = catWalkTimeMin + Random.Shared.NextSingle() * (catWalkTimeMax - catWalkTimeMin);
-                        catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
-                        catFrameIndex = 0;
-                        catAnimTimer = 0f;
-                    }
-                    else
-                    {
-                        catBehaviorTimer = catIdleWaitMin + Random.Shared.NextSingle() * (catIdleWaitMax - catIdleWaitMin);
-                    }
-                }
+                WanderingCat wc = wanderingCats[ci];
+                WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, catWanderParams);
+                wanderingCats[ci] = wc;
             }
-            else
-            {
-                catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
-                float dx = catWalkFacingSign * catWalkSpeed * dt;
-                catWorldPos.X += dx;
-                if (map.OverlapsBlockingTile(catWorldPos, mapScale, catHitHalfW, catHitHalfH))
-                {
-                    catWorldPos.X -= dx;
-                    catWalkFacingSign = -catWalkFacingSign;
-                    catDrawRow = catWalkFacingSign < 0 ? catWalkLeftRow : catWalkRightRow;
-                }
-
-                float leashDx = catWorldPos.X - catHomePos.X;
-                if (leashDx > catLeashRadius)
-                {
-                    catWalkFacingSign = -1;
-                    catDrawRow = catWalkLeftRow;
-                }
-                else if (leashDx < -catLeashRadius)
-                {
-                    catWalkFacingSign = 1;
-                    catDrawRow = catWalkRightRow;
-                }
-
-                catAnimTimer += dt;
-                while (catAnimTimer >= catWalkFrameSeconds)
-                {
-                    catAnimTimer -= catWalkFrameSeconds;
-                    catFrameIndex = (catFrameIndex + 1) % catWalkFrameCount;
-                }
-
-                catWalkTimeLeft -= dt;
-                if (catWalkTimeLeft <= 0f)
-                {
-                    catIsWalking = false;
-                    catBehaviorTimer = catIdleWaitMin + Random.Shared.NextSingle() * (catIdleWaitMax - catIdleWaitMin);
-                    catDrawRow = catIdleRow;
-                    catFrameIndex = 0;
-                    catAnimTimer = 0f;
-                }
-            }
-
-            catWorldPos.X = Math.Clamp(catWorldPos.X, catHitHalfW, Math.Max(catHitHalfW, worldW - catHitHalfW));
-            catWorldPos.Y = Math.Clamp(catWorldPos.Y, catHitHalfH, Math.Max(catHitHalfH, worldH - catHitHalfH));
 
             float speed = playerVel.Length();
             // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
@@ -578,7 +516,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Vector2 npcDelta = wandererVel * dt;
             wandererWorldPos.X += npcDelta.X;
             bool wanderMapBlockX = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockX = Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+            bool wanderCatBlockX = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
             if (wanderMapBlockX || wanderCatBlockX)
             {
                 wandererWorldPos.X -= npcDelta.X;
@@ -591,7 +529,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             wandererWorldPos.Y += npcDelta.Y;
             bool wanderMapBlockY = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockY = Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+            bool wanderCatBlockY = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
             if (wanderMapBlockY || wanderCatBlockY)
             {
                 wandererWorldPos.Y -= npcDelta.Y;
@@ -604,12 +542,17 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
             wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-            if (Gameplay.WorldRectsOverlap(wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
-            {
-                Gameplay.PushOutOfWorldRect(ref wandererWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
-                wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
-                wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-            }
+            WanderingCat.NpcPushOutOfOverlappingCats(
+                ref wandererWorldPos,
+                playerHitHalfW,
+                playerHitHalfH,
+                wanderingCats,
+                catHitHalfW,
+                catHitHalfH,
+                worldW,
+                worldH,
+                playerHitHalfW,
+                playerHitHalfH);
 
             Vector2 wFace = wandererVel.LengthSquared() > 4f ? Vector2.Normalize(wandererVel) : wandererWanderDir;
             if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
@@ -680,7 +623,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Vector2 agentDelta = agentVel * dt;
                 agentWorldPos.X += agentDelta.X;
                 bool agentMapBlockX = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockX = Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                bool agentCatBlockX = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
                 if (agentMapBlockX || agentCatBlockX)
                 {
                     agentWorldPos.X -= agentDelta.X;
@@ -693,7 +636,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 agentWorldPos.Y += agentDelta.Y;
                 bool agentMapBlockY = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockY = Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
+                bool agentCatBlockY = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
                 if (agentMapBlockY || agentCatBlockY)
                 {
                     agentWorldPos.Y -= agentDelta.Y;
@@ -706,12 +649,17 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
                 agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-                if (Gameplay.WorldRectsOverlap(agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH))
-                {
-                    Gameplay.PushOutOfWorldRect(ref agentWorldPos, playerHitHalfW, playerHitHalfH, catWorldPos, catHitHalfW, catHitHalfH);
-                    agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
-                    agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-                }
+                WanderingCat.NpcPushOutOfOverlappingCats(
+                    ref agentWorldPos,
+                    playerHitHalfW,
+                    playerHitHalfH,
+                    wanderingCats,
+                    catHitHalfW,
+                    catHitHalfH,
+                    worldW,
+                    worldH,
+                    playerHitHalfW,
+                    playerHitHalfH);
 
                 Vector2 aFace = agentVel.LengthSquared() > 4f ? Vector2.Normalize(agentVel) : agentWanderDir;
                 if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
@@ -852,6 +800,16 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
                     || map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                 {
+                    bool bulletOutOfWorld = newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH;
+                    if (fromPlayer
+                        && !bulletOutOfWorld
+                        && wanderingCats.Count < maxWanderingCats
+                        && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
+                    {
+                        Vector2 spawnPos = Gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow));
+                    }
+
                     bullets.RemoveAt(i);
                 }
                 else if (fromPlayer && wandererAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
@@ -1026,17 +984,21 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Raylib.DrawRectangleLinesEx(agentBarBg, 1f, new Color(20, 20, 20, 255));
             }
 
-            int catStripFrameCount = catIsWalking ? catWalkFrameCount : catIdleFrameCount;
-            int catFrameSafe = catFrameIndex % catStripFrameCount;
-            var catSrc = new Rectangle(catFrameSafe * catFrameSize, catDrawRow * catFrameSize, catFrameSize, catFrameSize);
-            Vector2 catScreen = cameraOffsetSmoothed + catWorldPos;
-            float catW = catFrameSize * catDrawScale;
-            float catH = catFrameSize * catDrawScale;
-            float catLeft = catScreen.X - catW * 0.5f;
-            float catTop = catScreen.Y - catH * 0.5f;
-            var catDest = new Rectangle(catLeft, catTop, catW, catH);
-            Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
-            Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
+            for (int ci = 0; ci < wanderingCats.Count; ci++)
+            {
+                WanderingCat wc = wanderingCats[ci];
+                int catStripFrameCount = wc.IsWalking ? catWalkFrameCount : catIdleFrameCount;
+                int catFrameSafe = wc.FrameIndex % catStripFrameCount;
+                var catSrc = new Rectangle(catFrameSafe * catFrameSize, wc.DrawRow * catFrameSize, catFrameSize, catFrameSize);
+                Vector2 catScreen = cameraOffsetSmoothed + wc.WorldPos;
+                float catW = catFrameSize * catDrawScale;
+                float catH = catFrameSize * catDrawScale;
+                float catLeft = catScreen.X - catW * 0.5f;
+                float catTop = catScreen.Y - catH * 0.5f;
+                var catDest = new Rectangle(catLeft, catTop, catW, catH);
+                Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
+                Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
+            }
 
             float charX = playerScreenPos.X - destW / 2f;
             float charY = playerScreenPos.Y - destH / 2f;
