@@ -11,19 +11,11 @@ internal static class WandererTalk
     public static string[] Spawn { get; private set; } = [];
     public static string[] Death { get; private set; } = [];
 
-    public static void InitFromEmbeddedResource()
+    public static void InitFromEmbeddedResource(SleuthRay.IEmbeddedResourceReader resourceReader, Assembly? assembly = null)
     {
-        Assembly asm = Assembly.GetExecutingAssembly();
-        using Stream? stream = asm.GetManifestResourceStream(EmbeddedResourceName);
-        if (stream is null)
-        {
-            string names = string.Join(", ", asm.GetManifestResourceNames());
-            throw new InvalidOperationException(
-                $"Missing embedded resource '{EmbeddedResourceName}'. Manifest names: {names}");
-        }
-
+        string text = resourceReader.ReadText(EmbeddedResourceName, assembly);
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        WandererTalkJson? data = JsonSerializer.Deserialize<WandererTalkJson>(stream, options);
+        WandererTalkJson? data = JsonSerializer.Deserialize<WandererTalkJson>(text, options);
         if (data is null)
         {
             throw new InvalidOperationException($"{EmbeddedResourceName}: JSON deserialization returned null.");

@@ -7,9 +7,18 @@ namespace SleuthRay;
 public sealed class SleuthRayGame : ISleuthRayGame
 {
     readonly SleuthRayOptions _options;
+    readonly IEmbeddedResourceReader _resourceReader;
+    readonly ICatNamePicker _catNamePicker;
 
-    public SleuthRayGame(IOptions<SleuthRayOptions> optionsAccessor) =>
+    public SleuthRayGame(
+        IOptions<SleuthRayOptions> optionsAccessor,
+        IEmbeddedResourceReader resourceReader,
+        ICatNamePicker catNamePicker)
+    {
         _options = optionsAccessor.Value;
+        _resourceReader = resourceReader;
+        _catNamePicker = catNamePicker;
+    }
 
     public void Run()
     {
@@ -222,14 +231,13 @@ public sealed class SleuthRayGame : ISleuthRayGame
         };
 
         // Load embedded resources before anything tries to use them (e.g., cat spawn names).
-        WandererTalk.InitFromEmbeddedResource();
-        CatNames.InitFromEmbeddedResource();
+        WandererTalk.InitFromEmbeddedResource(_resourceReader);
 
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
             Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
             catIdleRow,
-            CatNames.Pick()));
+            _catNamePicker.Pick()));
 
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
@@ -836,7 +844,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Vector2 vel = dir * bulletSpeed;
-                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, CatNames.Pick()));
+                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, _catNamePicker.Pick()));
                 catsInInventory--;
             }
 
@@ -1185,6 +1193,49 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     Raylib.DrawRectangleLinesEx(enemyBulletBounds, spriteBoundsThick, spriteBoundsCol);
                 }
             }
+
+            // Radar (top-right): player, enemies, cats in world-space.
+            const float radarMargin = 14f;
+            const float radarPad = 8f;
+            const float radarSize = 164f;
+            var radarRect = new Rectangle(screenWidth - radarMargin - radarSize, radarMargin, radarSize, radarSize);
+            Raylib.DrawRectangleRec(radarRect, new Color((byte)8, (byte)14, (byte)28, (byte)135));
+            Raylib.DrawRectangleLinesEx(radarRect, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
+
+            float innerX = radarRect.X + radarPad;
+            float innerY = radarRect.Y + radarPad;
+            float innerW = radarRect.Width - radarPad * 2f;
+            float innerH = radarRect.Height - radarPad * 2f;
+
+            Vector2 RadarMap(Vector2 worldPos)
+            {
+                float nx = worldW <= 0.001f ? 0.5f : Math.Clamp(worldPos.X / worldW, 0f, 1f);
+                float ny = worldH <= 0.001f ? 0.5f : Math.Clamp(worldPos.Y / worldH, 0f, 1f);
+                return new Vector2(innerX + nx * innerW, innerY + ny * innerH);
+            }
+
+            void DrawRadarDot(Vector2 worldPos, float r, Color col)
+            {
+                Vector2 p = RadarMap(worldPos);
+                Raylib.DrawCircleV(p, r, col);
+            }
+
+            // Cats (draw first so player/enemies sit on top).
+            var catDot = new Color((byte)245, (byte)245, (byte)245, (byte)255);
+            for (int ci = 0; ci < wanderingCats.Count; ci++)
+            {
+                DrawRadarDot(wanderingCats[ci].WorldPos, 2.2f, catDot);
+            }
+
+            // Enemies.
+            var wandererDot = new Color((byte)60, (byte)180, (byte)90, (byte)255);
+            var agentDot = new Color((byte)210, (byte)130, (byte)55, (byte)255);
+            if (wandererAlive) DrawRadarDot(wandererWorldPos, 2.8f, wandererDot);
+            if (agentAlive) DrawRadarDot(agentWorldPos, 2.8f, agentDot);
+
+            // Player.
+            var playerDot = new Color((byte)70, (byte)150, (byte)235, (byte)255);
+            DrawRadarDot(playerWorldPos, 3.2f, playerDot);
 
             const int hintFont = 22;
             const int hintPad = 12;
