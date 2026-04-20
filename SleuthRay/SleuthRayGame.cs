@@ -220,10 +220,16 @@ public sealed class SleuthRayGame : ISleuthRayGame
             ReturnHesitateSecondsMin = catReturnHesitateSecondsMin,
             ReturnHesitateSecondsMax = catReturnHesitateSecondsMax,
         };
+
+        // Load embedded resources before anything tries to use them (e.g., cat spawn names).
+        WandererTalk.InitFromEmbeddedResource();
+        CatNames.InitFromEmbeddedResource();
+
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
             Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
-            catIdleRow));
+            catIdleRow,
+            CatNames.Pick()));
 
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
@@ -235,8 +241,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
         bool statsMenuOpen = false;
-
-        WandererTalk.InitFromEmbeddedResource();
         wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
         wandererSpeechTimer = wandererSpeechShowSeconds;
         wandererChatterCooldown = 18f + Random.Shared.NextSingle() * 12f;
@@ -851,7 +855,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
                         Vector2 spawnPos = Gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
-                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow));
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, CatNames.Pick()));
                     }
 
                     bullets.RemoveAt(i);
@@ -1052,6 +1056,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 var catDest = new Rectangle(catLeft, catTop, catW, catH);
                 Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
                 Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
+
+                if (wc.Name.Length > 0)
+                {
+                    const int catNameFontPx = 16;
+                    int nameW = Raylib.MeasureText(wc.Name, catNameFontPx);
+                    int nameX = (int)(catScreen.X - nameW * 0.5f);
+                    int nameY = (int)(catTop - 18f);
+                    var nameShadow = new Color((byte)0, (byte)0, (byte)0, (byte)200);
+                    var nameFg = new Color((byte)245, (byte)245, (byte)245, (byte)255);
+                    Raylib.DrawText(wc.Name, nameX + 1, nameY + 1, catNameFontPx, nameShadow);
+                    Raylib.DrawText(wc.Name, nameX, nameY, catNameFontPx, nameFg);
+                }
             }
 
             float charX = playerScreenPos.X - destW / 2f;

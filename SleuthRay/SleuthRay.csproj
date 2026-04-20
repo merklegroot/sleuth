@@ -15,6 +15,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Resources\wanderer_talk.json" LogicalName="wanderer_talk.json" />
     <EmbeddedResource Include="Resources\gunshot.wav" LogicalName="gunshot.wav" />
+    <EmbeddedResource Include="res\cat_names.txt" LogicalName="cat_names.txt" />
   </ItemGroup>
 
   <ItemGroup>

@@ -36,6 +36,7 @@ internal struct WanderingCat
 {
     public Vector2 WorldPos;
     public Vector2 HomePos;
+    public string Name;
     public bool IsWalking;
     public float BehaviorTimer;
     public int WalkFacingSign;
@@ -48,10 +49,11 @@ internal struct WanderingCat
     public Vector2 ReturnTargetOffset;
     public float ReturnWeavePhase;
 
-    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow) => new()
+    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name) => new()
     {
         WorldPos = worldPos,
         HomePos = worldPos,
+        Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
         IsWalking = false,
         BehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f,
         WalkFacingSign = 1,
