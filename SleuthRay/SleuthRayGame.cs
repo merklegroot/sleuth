@@ -108,7 +108,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         // Along last aim direction: offset by ~half scaled gun width so the pivot sits past the torso, not inside it.
         const float gunPivotAlongAimExtraPx = 14f;
         const float gunFlashDuration = 0.22f;
-        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown)>(48);
+        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
         const int maxCatsInInventory = 5;
@@ -631,7 +631,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     float dist = MathF.Sqrt(distSq);
                     Vector2 nd = toPlayer / dist;
-                    bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false, 0f));
+                    bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false, 0f, ""));
                     wandererShootCooldown = wandererShootIntervalMin
                         + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
                     if (gunshotSoundReady)
@@ -738,7 +738,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     {
                         float distA = MathF.Sqrt(distSqA);
                         Vector2 ndA = toPlayerA / distA;
-                        bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false, 0f));
+                        bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false, 0f, ""));
                         agentShootCooldown = wandererShootIntervalMin
                             + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
                         if (gunshotSoundReady)
@@ -836,13 +836,13 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Vector2 vel = dir * bulletSpeed;
-                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f));
+                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, CatNames.Pick()));
                 catsInInventory--;
             }
 
             for (int i = bullets.Count - 1; i >= 0; i--)
             {
-                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown) = bullets[i];
+                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, string bulletName) = bullets[i];
                 hitCooldown = MathF.Max(0f, hitCooldown - dt);
                 Vector2 newPos = pos + vel * dt;
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
@@ -855,7 +855,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
                         Vector2 spawnPos = Gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
-                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, CatNames.Pick()));
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName));
                     }
 
                     bullets.RemoveAt(i);
@@ -883,7 +883,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         }
                     }
 
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                 }
                 else if (fromPlayer && agentAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
                 {
@@ -900,7 +900,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         }
                     }
 
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                 }
                 else if (!fromPlayer && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                 {
@@ -919,7 +919,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
                 else
                 {
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                 }
             }
 
@@ -1130,7 +1130,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = 0; i < bullets.Count; i++)
             {
-                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _) = bullets[i];
+                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _, string bName) = bullets[i];
                 Vector2 screen = cameraOffsetSmoothed + bPos;
                 if (bFromPlayer)
                 {
@@ -1151,6 +1151,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     var catBulletBounds = new Rectangle(screen.X - cbW * 0.5f, screen.Y - cbH * 0.5f, cbW, cbH);
                     Raylib.DrawTexturePro(catTexture, catBulletSrc, catBulletDest, catBulletOrigin, catRotDeg, Color.WHITE);
                     Raylib.DrawRectangleLinesEx(catBulletBounds, spriteBoundsThick, spriteBoundsCol);
+
+                    if (bName.Length > 0)
+                    {
+                        const int firedCatNameFontPx = 16;
+                        int nameW = Raylib.MeasureText(bName, firedCatNameFontPx);
+                        int nameX = (int)(screen.X - nameW * 0.5f);
+                        int nameY = (int)(screen.Y - cbH * 0.5f - 18f);
+                        var nameShadow = new Color((byte)0, (byte)0, (byte)0, (byte)200);
+                        var nameFg = new Color((byte)245, (byte)245, (byte)245, (byte)255);
+                        Raylib.DrawText(bName, nameX + 1, nameY + 1, firedCatNameFontPx, nameShadow);
+                        Raylib.DrawText(bName, nameX, nameY, firedCatNameFontPx, nameFg);
+                    }
                 }
                 else
                 {
