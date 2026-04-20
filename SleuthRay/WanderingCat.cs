@@ -49,28 +49,39 @@ internal struct WanderingCat
     public float ReturnTargetTimer;
     public Vector2 ReturnTargetOffset;
     public float ReturnWeavePhase;
+    public int Health;
+    public int MaxHealth;
+    public float HitFlashTimer;
 
-    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name) => new()
+    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth)
     {
-        WorldPos = worldPos,
-        HomePos = worldPos,
-        Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
-        DebugAction = "spawn",
-        IsWalking = false,
-        BehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f,
-        WalkFacingSign = 1,
-        WalkTimeLeft = 0f,
-        FrameIndex = 0,
-        AnimTimer = 0f,
-        DrawRow = idleRow,
-        AgeSeconds = 0f,
-        ReturnTargetTimer = 0f,
-        ReturnTargetOffset = Vector2.Zero,
-        ReturnWeavePhase = Random.Shared.NextSingle() * MathF.Tau,
-    };
+        int mh = Math.Max(1, maxHealth);
+        return new()
+        {
+            WorldPos = worldPos,
+            HomePos = worldPos,
+            Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
+            DebugAction = "spawn",
+            IsWalking = false,
+            BehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f,
+            WalkFacingSign = 1,
+            WalkTimeLeft = 0f,
+            FrameIndex = 0,
+            AnimTimer = 0f,
+            DrawRow = idleRow,
+            AgeSeconds = 0f,
+            ReturnTargetTimer = 0f,
+            ReturnTargetOffset = Vector2.Zero,
+            ReturnWeavePhase = Random.Shared.NextSingle() * MathF.Tau,
+            MaxHealth = mh,
+            Health = mh,
+            HitFlashTimer = 0f,
+        };
+    }
 
     public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p)
     {
+        c.HitFlashTimer = MathF.Max(0f, c.HitFlashTimer - dt);
         c.AgeSeconds += dt;
         float returnW = 0f;
         if (p.ReturnRampSeconds > 0f && c.AgeSeconds > p.ReturnDelaySeconds)

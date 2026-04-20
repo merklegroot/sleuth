@@ -226,6 +226,10 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float catReturnHesitateSecondsMin = 0.22f;
         const float catReturnHesitateSecondsMax = 0.65f;
         const int maxWanderingCats = 32;
+        const int catMaxHealth = 5;
+        // Slightly taller than NPC bars so they stay readable on 64px cats; drawn after map overlay so roofs do not cover them.
+        const float catHealthBarHeight = 7f;
+        const float catHealthBarGapAboveSprite = 8f;
         var catWanderParams = new CatWanderParams
         {
             IdleRow = catIdleRow,
@@ -263,7 +267,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
         wanderingCats.Add(WanderingCat.SpawnAt(
             _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
             catIdleRow,
-            _catNamePicker.Pick()));
+            _catNamePicker.Pick(),
+            catMaxHealth));
 
         string wandererSpeech = "";
         float wandererSpeechTimer = 0f;
@@ -891,7 +896,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
                         Vector2 spawnPos = _gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
-                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName));
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName, catMaxHealth));
                     }
 
                     bullets.RemoveAt(i);
@@ -937,6 +942,43 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     }
 
                     bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                }
+                else if (fromPlayer)
+                {
+                    int hitCatIndex = -1;
+                    for (int ci = 0; ci < wanderingCats.Count; ci++)
+                    {
+                        if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
+                        {
+                            hitCatIndex = ci;
+                            break;
+                        }
+                    }
+
+                    if (hitCatIndex >= 0)
+                    {
+                        if (hitCooldown <= 0f)
+                        {
+                            hitCooldown = 0.20f;
+                            WanderingCat hitCat = wanderingCats[hitCatIndex];
+                            hitCat.Health--;
+                            hitCat.HitFlashTimer = wandererHitFlashDuration;
+                            if (hitCat.Health <= 0)
+                            {
+                                wanderingCats.RemoveAt(hitCatIndex);
+                            }
+                            else
+                            {
+                                wanderingCats[hitCatIndex] = hitCat;
+                            }
+                        }
+
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                    }
+                    else
+                    {
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                    }
                 }
                 else if (!fromPlayer && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                 {
@@ -1090,27 +1132,48 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float catLeft = catScreen.X - catW * 0.5f;
                 float catTop = catScreen.Y - catH * 0.5f;
                 var catDest = new Rectangle(catLeft, catTop, catW, catH);
-                Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
+                Color catTint = Color.WHITE;
+                if (wc.HitFlashTimer > 0f)
+                {
+                    bool on = ((int)(wc.HitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+                    if (on)
+                    {
+                        catTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+                    }
+                }
+
+                Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, catTint);
                 Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
 
-                if (wc.DebugAction.Length > 0)
+                // Align with post-overlay health bar (same catTop / bar geometry) so labels sit above the bar.
+                float catBarTop = catTop - catHealthBarGapAboveSprite - catHealthBarHeight;
+                const int catNameFontPx = 16;
+                const int catDebugFontPx = 14;
+                const float catNameGapAboveBar = 3f;
+                const float catDebugGapAboveName = 2f;
+                bool showName = wc.Name.Length > 0;
+                bool showDbg = wc.DebugAction.Length > 0;
+                int nameY = showName ? (int)(catBarTop - catNameGapAboveBar - catNameFontPx) : 0;
+                int dbgY = showDbg
+                    ? showName
+                        ? (int)(nameY - catDebugGapAboveName - catDebugFontPx)
+                        : (int)(catBarTop - catNameGapAboveBar - catDebugFontPx)
+                    : 0;
+
+                if (showDbg)
                 {
-                    const int catDebugFontPx = 14;
                     int dbgW = Raylib.MeasureText(wc.DebugAction, catDebugFontPx);
                     int dbgX = (int)(catScreen.X - dbgW * 0.5f);
-                    int dbgY = (int)(catTop - 34f);
                     var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
                     var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
                     Raylib.DrawText(wc.DebugAction, dbgX + 1, dbgY + 1, catDebugFontPx, dbgShadow);
                     Raylib.DrawText(wc.DebugAction, dbgX, dbgY, catDebugFontPx, dbgFg);
                 }
 
-                if (wc.Name.Length > 0)
+                if (showName)
                 {
-                    const int catNameFontPx = 16;
                     int nameW = Raylib.MeasureText(wc.Name, catNameFontPx);
                     int nameX = (int)(catScreen.X - nameW * 0.5f);
-                    int nameY = (int)(catTop - 18f);
                     var nameShadow = new Color((byte)0, (byte)0, (byte)0, (byte)200);
                     var nameFg = new Color((byte)245, (byte)245, (byte)245, (byte)255);
                     Raylib.DrawText(wc.Name, nameX + 1, nameY + 1, catNameFontPx, nameShadow);
@@ -1175,6 +1238,27 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             map.DrawOverlay(scale: mapScale, offset: cameraOffsetSmoothed);
+
+            for (int ci = 0; ci < wanderingCats.Count; ci++)
+            {
+                WanderingCat wc = wanderingCats[ci];
+                Vector2 catScreen = cameraOffsetSmoothed + wc.WorldPos;
+                float catW = catFrameSize * catDrawScale;
+                float catTop = catScreen.Y - catFrameSize * catDrawScale * 0.5f;
+                float catBarW = catW - wandererHealthBarPadX * 2f;
+                float catBarLeft = catScreen.X - catBarW * 0.5f;
+                float catBarTop = catTop - catHealthBarGapAboveSprite - catHealthBarHeight;
+                var catBarBg = new Rectangle(catBarLeft, catBarTop, catBarW, catHealthBarHeight);
+                Raylib.DrawRectangleRec(catBarBg, new Color((byte)48, (byte)28, (byte)52, (byte)255));
+                float catHpFrac = wc.MaxHealth > 0 ? wc.Health / (float)wc.MaxHealth : 0f;
+                if (catHpFrac > 0f)
+                {
+                    var catBarFill = new Rectangle(catBarLeft, catBarTop, catBarW * catHpFrac, catHealthBarHeight);
+                    Raylib.DrawRectangleRec(catBarFill, new Color((byte)255, (byte)130, (byte)190, (byte)255));
+                }
+
+                Raylib.DrawRectangleLinesEx(catBarBg, 1f, new Color(30, 30, 30, 255));
+            }
 
             for (int i = 0; i < bullets.Count; i++)
             {
