@@ -111,6 +111,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
+        int catsInInventory = 3;
 
         // NPC shares player strip layout (16×20, 4 rows × 4 walk frames).
         Vector2 wandererWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
@@ -776,7 +777,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            bool firePressed = !statsMenuOpen
+            bool firePressed = catsInInventory > 0
+                && !statsMenuOpen
                 && ((spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed);
             if (firePressed)
             {
@@ -791,6 +793,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 Vector2 vel = dir * bulletSpeed;
                 bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true));
+                catsInInventory--;
             }
 
             for (int i = bullets.Count - 1; i >= 0; i--)
