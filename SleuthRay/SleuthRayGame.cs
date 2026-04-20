@@ -179,6 +179,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float catIdleWaitMax = 3.8f;
         const float catWalkTimeMin = 0.45f;
         const float catWalkTimeMax = 1.65f;
+        const float catReturnDelaySeconds = 1.35f;
+        const float catReturnRampSeconds = 4.25f;
+        const float catReturnSpeed = 88f;
         const int maxWanderingCats = 32;
         var catWanderParams = new CatWanderParams
         {
@@ -197,6 +200,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
             IdleWaitMax = catIdleWaitMax,
             WalkTimeMin = catWalkTimeMin,
             WalkTimeMax = catWalkTimeMax,
+            ReturnDelaySeconds = catReturnDelaySeconds,
+            ReturnRampSeconds = catReturnRampSeconds,
+            ReturnSpeed = catReturnSpeed,
         };
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
@@ -393,7 +399,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             for (int ci = 0; ci < wanderingCats.Count; ci++)
             {
                 WanderingCat wc = wanderingCats[ci];
-                WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, catWanderParams);
+                WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, playerWorldPos, catWanderParams);
                 wanderingCats[ci] = wc;
             }
 

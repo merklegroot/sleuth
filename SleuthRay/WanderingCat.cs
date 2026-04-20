@@ -19,6 +19,9 @@ internal readonly struct CatWanderParams
     public float IdleWaitMax { get; init; }
     public float WalkTimeMin { get; init; }
     public float WalkTimeMax { get; init; }
+    public float ReturnDelaySeconds { get; init; }
+    public float ReturnRampSeconds { get; init; }
+    public float ReturnSpeed { get; init; }
 }
 
 internal struct WanderingCat
@@ -32,6 +35,7 @@ internal struct WanderingCat
     public int FrameIndex;
     public float AnimTimer;
     public int DrawRow;
+    public float AgeSeconds;
 
     public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow) => new()
     {
@@ -44,20 +48,23 @@ internal struct WanderingCat
         FrameIndex = 0,
         AnimTimer = 0f,
         DrawRow = idleRow,
+        AgeSeconds = 0f,
     };
 
-    public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, in CatWanderParams p)
+    public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p)
     {
+        c.AgeSeconds += dt;
+        float returnW = 0f;
+        if (p.ReturnRampSeconds > 0f && c.AgeSeconds > p.ReturnDelaySeconds)
+        {
+            returnW = Math.Clamp((c.AgeSeconds - p.ReturnDelaySeconds) / p.ReturnRampSeconds, 0f, 1f);
+            // Ease-in so it feels like it "decides" to come back, not an abrupt pull.
+            returnW = returnW * returnW * (3f - 2f * returnW); // smoothstep
+        }
+
+        Vector2 wanderVel = Vector2.Zero;
         if (!c.IsWalking)
         {
-            c.DrawRow = p.IdleRow;
-            c.AnimTimer += dt;
-            while (c.AnimTimer >= p.IdleFrameSeconds)
-            {
-                c.AnimTimer -= p.IdleFrameSeconds;
-                c.FrameIndex = (c.FrameIndex + 1) % p.IdleFrameCount;
-            }
-
             c.BehaviorTimer -= dt;
             if (c.BehaviorTimer <= 0f)
             {
@@ -88,43 +95,73 @@ internal struct WanderingCat
         }
         else
         {
-            c.DrawRow = c.WalkFacingSign < 0 ? p.WalkLeftRow : p.WalkRightRow;
-            float dx = c.WalkFacingSign * p.WalkSpeed * dt;
-            c.WorldPos.X += dx;
-            if (map.OverlapsBlockingTile(c.WorldPos, mapScale, p.HitHalfW, p.HitHalfH))
-            {
-                c.WorldPos.X -= dx;
-                c.WalkFacingSign = -c.WalkFacingSign;
-                c.DrawRow = c.WalkFacingSign < 0 ? p.WalkLeftRow : p.WalkRightRow;
-            }
-
-            float leashDx = c.WorldPos.X - c.HomePos.X;
-            if (leashDx > p.LeashRadius)
-            {
-                c.WalkFacingSign = -1;
-                c.DrawRow = p.WalkLeftRow;
-            }
-            else if (leashDx < -p.LeashRadius)
-            {
-                c.WalkFacingSign = 1;
-                c.DrawRow = p.WalkRightRow;
-            }
-
-            c.AnimTimer += dt;
-            while (c.AnimTimer >= p.WalkFrameSeconds)
-            {
-                c.AnimTimer -= p.WalkFrameSeconds;
-                c.FrameIndex = (c.FrameIndex + 1) % p.WalkFrameCount;
-            }
-
             c.WalkTimeLeft -= dt;
             if (c.WalkTimeLeft <= 0f)
             {
                 c.IsWalking = false;
                 c.BehaviorTimer = p.IdleWaitMin + Random.Shared.NextSingle() * (p.IdleWaitMax - p.IdleWaitMin);
-                c.DrawRow = p.IdleRow;
-                c.FrameIndex = 0;
-                c.AnimTimer = 0f;
+            }
+
+            wanderVel = new Vector2(c.WalkFacingSign * p.WalkSpeed, 0f);
+            float leashDx = c.WorldPos.X - c.HomePos.X;
+            if (leashDx > p.LeashRadius)
+            {
+                c.WalkFacingSign = -1;
+            }
+            else if (leashDx < -p.LeashRadius)
+            {
+                c.WalkFacingSign = 1;
+            }
+        }
+
+        Vector2 seekVel = Vector2.Zero;
+        Vector2 toPlayer = playerWorldPos - c.WorldPos;
+        float toPlayerLenSq = toPlayer.LengthSquared();
+        if (toPlayerLenSq > 0.001f)
+        {
+            float invLen = 1f / MathF.Sqrt(toPlayerLenSq);
+            seekVel = toPlayer * invLen * p.ReturnSpeed;
+        }
+
+        Vector2 blendedVel = Vector2.Lerp(wanderVel, seekVel, returnW);
+        Vector2 moveDelta = blendedVel * dt;
+
+        // Resolve collision per-axis so cats slide along walls like the player/NPCs.
+        c.WorldPos.X += moveDelta.X;
+        if (map.OverlapsBlockingTile(c.WorldPos, mapScale, p.HitHalfW, p.HitHalfH))
+        {
+            c.WorldPos.X -= moveDelta.X;
+        }
+
+        c.WorldPos.Y += moveDelta.Y;
+        if (map.OverlapsBlockingTile(c.WorldPos, mapScale, p.HitHalfW, p.HitHalfH))
+        {
+            c.WorldPos.Y -= moveDelta.Y;
+        }
+
+        bool moving = blendedVel.LengthSquared() > 4f;
+        if (!moving)
+        {
+            c.DrawRow = p.IdleRow;
+            c.AnimTimer += dt;
+            while (c.AnimTimer >= p.IdleFrameSeconds)
+            {
+                c.AnimTimer -= p.IdleFrameSeconds;
+                c.FrameIndex = (c.FrameIndex + 1) % p.IdleFrameCount;
+            }
+        }
+        else
+        {
+            if (MathF.Abs(blendedVel.X) > 0.25f)
+            {
+                c.WalkFacingSign = blendedVel.X < 0f ? -1 : 1;
+            }
+            c.DrawRow = c.WalkFacingSign < 0 ? p.WalkLeftRow : p.WalkRightRow;
+            c.AnimTimer += dt;
+            while (c.AnimTimer >= p.WalkFrameSeconds)
+            {
+                c.AnimTimer -= p.WalkFrameSeconds;
+                c.FrameIndex = (c.FrameIndex + 1) % p.WalkFrameCount;
             }
         }
 
