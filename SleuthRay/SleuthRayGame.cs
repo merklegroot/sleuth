@@ -9,15 +9,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
     readonly SleuthRayOptions _options;
     readonly IEmbeddedResourceReader _resourceReader;
     readonly ICatNamePicker _catNamePicker;
+    readonly IWandererTalkPicker _wandererTalkPicker;
 
     public SleuthRayGame(
         IOptions<SleuthRayOptions> optionsAccessor,
         IEmbeddedResourceReader resourceReader,
-        ICatNamePicker catNamePicker)
+        ICatNamePicker catNamePicker,
+        IWandererTalkPicker wandererTalkPicker)
     {
         _options = optionsAccessor.Value;
         _resourceReader = resourceReader;
         _catNamePicker = catNamePicker;
+        _wandererTalkPicker = wandererTalkPicker;
     }
 
     public void Run()
@@ -231,7 +234,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         };
 
         // Load embedded resources before anything tries to use them (e.g., cat spawn names).
-        WandererTalk.InitFromEmbeddedResource(_resourceReader);
+        // (Now handled by repos/pickers on-demand; keep the startup ordering intent here.)
 
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
@@ -249,7 +252,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
         bool statsMenuOpen = false;
-        wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
+        wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
         wandererSpeechTimer = wandererSpeechShowSeconds;
         wandererChatterCooldown = 18f + Random.Shared.NextSingle() * 12f;
 
@@ -306,7 +309,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     wandererChatterCooldown -= dt;
                     if (wandererChatterCooldown <= 0f)
                     {
-                        wandererSpeech = WandererTalk.Pick(WandererTalk.Idle);
+                        wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Idle);
                         wandererSpeechTimer = wandererSpeechShowSeconds;
                         wandererChatterCooldown = 16f + Random.Shared.NextSingle() * 22f;
                     }
@@ -528,7 +531,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     wandererHitFlashTimer = 0f;
                     wandererAlive = true;
                     wandererShootCooldown = 1.2f + Random.Shared.NextSingle() * 1.6f;
-                    wandererSpeech = WandererTalk.Pick(WandererTalk.Spawn);
+                    wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
                     wandererSpeechTimer = wandererSpeechShowSeconds;
                     wandererChatterCooldown = wandererSpeechShowSeconds + 8f + Random.Shared.NextSingle() * 10f;
                 }
@@ -648,7 +651,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
                     }
 
-                    wandererSpeech = WandererTalk.Pick(WandererTalk.Shoot);
+                    wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Shoot);
                     wandererSpeechTimer = wandererSpeechShowSeconds;
                     wandererChatterCooldown = 8f + Random.Shared.NextSingle() * 10f;
                 }
@@ -874,14 +877,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     {
                         hitCooldown = 0.20f;
                         wandererHitFlashTimer = wandererHitFlashDuration;
-                        wandererSpeech = WandererTalk.Pick(WandererTalk.Hurt);
+                        wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Hurt);
                         wandererSpeechTimer = wandererSpeechShowSeconds;
                         wandererHealth--;
                         if (wandererHealth <= 0)
                         {
                             wandererAlive = false;
                             wandererVel = Vector2.Zero;
-                            wandererSpeech = WandererTalk.Pick(WandererTalk.Death);
+                            wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Death);
                             wandererSpeechTimer = wandererSpeechShowSeconds;
                             wandererRespawnTimer = MathF.Max(wandererRespawnDelay, wandererSpeechShowSeconds + 0.45f);
                         }

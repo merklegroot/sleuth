@@ -1,18 +1,32 @@
 using System.Reflection;
 using System.Text.Json;
 
-internal static class WandererTalk
+namespace SleuthRay;
+
+public sealed record WandererTalkData(
+    string[] Idle,
+    string[] Shoot,
+    string[] Hurt,
+    string[] Spawn,
+    string[] Death);
+
+public interface IWandererTalkRepo
+{
+    WandererTalkData Get(Assembly? assembly = null);
+}
+
+public sealed class WandererTalkRepo(IEmbeddedResourceReader resourceReader) : IWandererTalkRepo
 {
     const string EmbeddedResourceName = "wanderer_talk.json";
+    WandererTalkData? _cached;
 
-    public static string[] Idle { get; private set; } = [];
-    public static string[] Shoot { get; private set; } = [];
-    public static string[] Hurt { get; private set; } = [];
-    public static string[] Spawn { get; private set; } = [];
-    public static string[] Death { get; private set; } = [];
-
-    public static void InitFromEmbeddedResource(SleuthRay.IEmbeddedResourceReader resourceReader, Assembly? assembly = null)
+    public WandererTalkData Get(Assembly? assembly = null)
     {
+        if (_cached is not null)
+        {
+            return _cached;
+        }
+
         string text = resourceReader.ReadText(EmbeddedResourceName, assembly);
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         WandererTalkJson? data = JsonSerializer.Deserialize<WandererTalkJson>(text, options);
@@ -21,11 +35,14 @@ internal static class WandererTalk
             throw new InvalidOperationException($"{EmbeddedResourceName}: JSON deserialization returned null.");
         }
 
-        Idle = RequireLines(data.Idle, nameof(data.Idle));
-        Shoot = RequireLines(data.Shoot, nameof(data.Shoot));
-        Hurt = RequireLines(data.Hurt, nameof(data.Hurt));
-        Spawn = RequireLines(data.Spawn, nameof(data.Spawn));
-        Death = RequireLines(data.Death, nameof(data.Death));
+        _cached = new WandererTalkData(
+            RequireLines(data.Idle, nameof(data.Idle)),
+            RequireLines(data.Shoot, nameof(data.Shoot)),
+            RequireLines(data.Hurt, nameof(data.Hurt)),
+            RequireLines(data.Spawn, nameof(data.Spawn)),
+            RequireLines(data.Death, nameof(data.Death)));
+
+        return _cached;
     }
 
     static string[] RequireLines(string[]? lines, string fieldName)
@@ -46,8 +63,6 @@ internal static class WandererTalk
         return lines;
     }
 
-    public static string Pick(string[] lines) => lines[Random.Shared.Next(lines.Length)];
-
     sealed class WandererTalkJson
     {
         public string[]? Idle { get; set; }
@@ -57,3 +72,4 @@ internal static class WandererTalk
         public string[]? Death { get; set; }
     }
 }
+

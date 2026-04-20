@@ -10,5 +10,7 @@ public static class SleuthRayGameRegistry
             .AddSingleton<IEmbeddedResourceReader, EmbeddedResourceReader>()
             .AddSingleton<ICatNameRepo, CatNameRepo>()
             .AddSingleton<ICatNamePicker, CatNamePicker>()
+            .AddSingleton<IWandererTalkRepo, WandererTalkRepo>()
+            .AddSingleton<IWandererTalkPicker, WandererTalkPicker>()
             .AddSingleton<ISleuthRayGame, SleuthRayGame>();
 }
