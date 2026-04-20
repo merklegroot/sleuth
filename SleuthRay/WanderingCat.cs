@@ -22,6 +22,14 @@ internal readonly struct CatWanderParams
     public float ReturnDelaySeconds { get; init; }
     public float ReturnRampSeconds { get; init; }
     public float ReturnSpeed { get; init; }
+    public float ReturnTargetJitterSecondsMin { get; init; }
+    public float ReturnTargetJitterSecondsMax { get; init; }
+    public float ReturnTargetJitterRadiusNear { get; init; }
+    public float ReturnTargetJitterRadiusFar { get; init; }
+    public float ReturnWeaveStrength { get; init; }
+    public float ReturnHesitateChancePerSecond { get; init; }
+    public float ReturnHesitateSecondsMin { get; init; }
+    public float ReturnHesitateSecondsMax { get; init; }
 }
 
 internal struct WanderingCat
@@ -36,6 +44,9 @@ internal struct WanderingCat
     public float AnimTimer;
     public int DrawRow;
     public float AgeSeconds;
+    public float ReturnTargetTimer;
+    public Vector2 ReturnTargetOffset;
+    public float ReturnWeavePhase;
 
     public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow) => new()
     {
@@ -49,6 +60,9 @@ internal struct WanderingCat
         AnimTimer = 0f,
         DrawRow = idleRow,
         AgeSeconds = 0f,
+        ReturnTargetTimer = 0f,
+        ReturnTargetOffset = Vector2.Zero,
+        ReturnWeavePhase = Random.Shared.NextSingle() * MathF.Tau,
     };
 
     public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p)
@@ -119,8 +133,57 @@ internal struct WanderingCat
         float toPlayerLenSq = toPlayer.LengthSquared();
         if (toPlayerLenSq > 0.001f)
         {
-            float invLen = 1f / MathF.Sqrt(toPlayerLenSq);
-            seekVel = toPlayer * invLen * p.ReturnSpeed;
+            float toPlayerLen = MathF.Sqrt(toPlayerLenSq);
+            Vector2 toPlayerN = toPlayer / toPlayerLen;
+
+            // Pick a small moving offset near the player so the cat doesn't beeline straight at center.
+            // Offset refresh gets more frequent as returnW rises (i.e., as the cat commits to coming back).
+            c.ReturnTargetTimer -= dt * (0.65f + 0.85f * returnW);
+            if (c.ReturnTargetTimer <= 0f)
+            {
+                float jitterT = p.ReturnTargetJitterSecondsMin
+                    + Random.Shared.NextSingle() * MathF.Max(0.001f, p.ReturnTargetJitterSecondsMax - p.ReturnTargetJitterSecondsMin);
+                c.ReturnTargetTimer = jitterT;
+
+                // Wider offsets when far away; tighter offsets when already close.
+                float far01 = Math.Clamp((toPlayerLen - 70f) / 240f, 0f, 1f);
+                float jitterR = p.ReturnTargetJitterRadiusNear + (p.ReturnTargetJitterRadiusFar - p.ReturnTargetJitterRadiusNear) * far01;
+                float ang = Random.Shared.NextSingle() * MathF.Tau;
+                c.ReturnTargetOffset = new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * jitterR;
+            }
+
+            Vector2 returnTarget = playerWorldPos + c.ReturnTargetOffset;
+            Vector2 toTarget = returnTarget - c.WorldPos;
+            float toTargetLenSq = toTarget.LengthSquared();
+            if (toTargetLenSq > 0.001f)
+            {
+                float toTargetLen = MathF.Sqrt(toTargetLenSq);
+                Vector2 toTargetN = toTarget / toTargetLen;
+
+                // Arrive-ish speed so it doesn't knife past the player; still capped by ReturnSpeed.
+                float arriveSpeed = p.ReturnSpeed * Math.Clamp(toTargetLen / 120f, 0.25f, 1f);
+
+                // Add a gentle sideways weave so the path feels more curious than direct.
+                c.ReturnWeavePhase += dt * (2.0f + 2.6f * returnW);
+                Vector2 perp = new Vector2(-toTargetN.Y, toTargetN.X);
+                float weave = MathF.Sin(c.ReturnWeavePhase) * p.ReturnWeaveStrength;
+
+                seekVel = (toTargetN + perp * weave) * arriveSpeed;
+
+                // Occasionally hesitate (cat stops to "think") while returning.
+                if (returnW > 0.15f && p.ReturnHesitateChancePerSecond > 0f && c.BehaviorTimer <= 0.05f)
+                {
+                    float chance = p.ReturnHesitateChancePerSecond * dt * returnW;
+                    if (Random.Shared.NextSingle() < chance)
+                    {
+                        c.IsWalking = false;
+                        c.WalkTimeLeft = 0f;
+                        c.BehaviorTimer = p.ReturnHesitateSecondsMin
+                            + Random.Shared.NextSingle() * MathF.Max(0.001f, p.ReturnHesitateSecondsMax - p.ReturnHesitateSecondsMin);
+                        seekVel = Vector2.Zero;
+                    }
+                }
+            }
         }
 
         Vector2 blendedVel = Vector2.Lerp(wanderVel, seekVel, returnW);

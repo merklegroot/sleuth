@@ -182,6 +182,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float catReturnDelaySeconds = 1.35f;
         const float catReturnRampSeconds = 4.25f;
         const float catReturnSpeed = 88f;
+        const float catReturnTargetJitterSecondsMin = 0.55f;
+        const float catReturnTargetJitterSecondsMax = 1.25f;
+        const float catReturnTargetJitterRadiusNear = 22f;
+        const float catReturnTargetJitterRadiusFar = 70f;
+        const float catReturnWeaveStrength = 0.22f;
+        const float catReturnHesitateChancePerSecond = 0.20f;
+        const float catReturnHesitateSecondsMin = 0.22f;
+        const float catReturnHesitateSecondsMax = 0.65f;
         const int maxWanderingCats = 32;
         var catWanderParams = new CatWanderParams
         {
@@ -203,6 +211,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
             ReturnDelaySeconds = catReturnDelaySeconds,
             ReturnRampSeconds = catReturnRampSeconds,
             ReturnSpeed = catReturnSpeed,
+            ReturnTargetJitterSecondsMin = catReturnTargetJitterSecondsMin,
+            ReturnTargetJitterSecondsMax = catReturnTargetJitterSecondsMax,
+            ReturnTargetJitterRadiusNear = catReturnTargetJitterRadiusNear,
+            ReturnTargetJitterRadiusFar = catReturnTargetJitterRadiusFar,
+            ReturnWeaveStrength = catReturnWeaveStrength,
+            ReturnHesitateChancePerSecond = catReturnHesitateChancePerSecond,
+            ReturnHesitateSecondsMin = catReturnHesitateSecondsMin,
+            ReturnHesitateSecondsMax = catReturnHesitateSecondsMax,
         };
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
