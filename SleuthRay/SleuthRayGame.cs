@@ -1044,15 +1044,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float barLeft = wanderScreen.X - barW * 0.5f;
                 float barTop = wanderCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
                 var barBg = new Rectangle(barLeft, barTop, barW, wandererHealthBarHeight);
-                Raylib.DrawRectangleRec(barBg, new Color(45, 12, 12, 255));
+                Raylib.DrawRectangleRec(barBg, HealthBarPalette.Background);
                 float hpFrac = wandererHealth / (float)wandererMaxHealth;
                 if (hpFrac > 0f)
                 {
                     var barFill = new Rectangle(barLeft, barTop, barW * hpFrac, wandererHealthBarHeight);
-                    Raylib.DrawRectangleRec(barFill, new Color(60, 180, 90, 255));
+                    Raylib.DrawRectangleRec(barFill, HealthBarPalette.Fill(hpFrac));
                 }
 
-                Raylib.DrawRectangleLinesEx(barBg, 1f, new Color(20, 20, 20, 255));
+                Raylib.DrawRectangleLinesEx(barBg, 1f, HealthBarPalette.Outline);
 
                 if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
                 {
@@ -1109,15 +1109,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float agentBarLeft = agentScreen.X - agentBarW * 0.5f;
                 float agentBarTop = agentCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
                 var agentBarBg = new Rectangle(agentBarLeft, agentBarTop, agentBarW, wandererHealthBarHeight);
-                Raylib.DrawRectangleRec(agentBarBg, new Color(45, 22, 8, 255));
+                Raylib.DrawRectangleRec(agentBarBg, HealthBarPalette.Background);
                 float agentHpFrac = agentHealth / (float)agentMaxHealth;
                 if (agentHpFrac > 0f)
                 {
                     var agentBarFill = new Rectangle(agentBarLeft, agentBarTop, agentBarW * agentHpFrac, wandererHealthBarHeight);
-                    Raylib.DrawRectangleRec(agentBarFill, new Color(210, 130, 55, 255));
+                    Raylib.DrawRectangleRec(agentBarFill, HealthBarPalette.Fill(agentHpFrac));
                 }
 
-                Raylib.DrawRectangleLinesEx(agentBarBg, 1f, new Color(20, 20, 20, 255));
+                Raylib.DrawRectangleLinesEx(agentBarBg, 1f, HealthBarPalette.Outline);
             }
 
             for (int ci = 0; ci < wanderingCats.Count; ci++)
@@ -1202,15 +1202,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
             float pBarLeft = playerScreenPos.X - pBarW * 0.5f;
             float pBarTop = charY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
             var pBarBg = new Rectangle(pBarLeft, pBarTop, pBarW, wandererHealthBarHeight);
-            Raylib.DrawRectangleRec(pBarBg, new Color((byte)12, (byte)22, (byte)48, (byte)255));
+            Raylib.DrawRectangleRec(pBarBg, HealthBarPalette.Background);
             float pHpFrac = playerHealth / (float)playerMaxHealth;
             if (pHpFrac > 0f)
             {
                 var pBarFill = new Rectangle(pBarLeft, pBarTop, pBarW * pHpFrac, wandererHealthBarHeight);
-                Raylib.DrawRectangleRec(pBarFill, new Color((byte)70, (byte)150, (byte)235, (byte)255));
+                Raylib.DrawRectangleRec(pBarFill, HealthBarPalette.Fill(pHpFrac));
             }
 
-            Raylib.DrawRectangleLinesEx(pBarBg, 1f, new Color((byte)20, (byte)28, (byte)48, (byte)255));
+            Raylib.DrawRectangleLinesEx(pBarBg, 1f, HealthBarPalette.Outline);
 
             _gameplay.DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
 
@@ -1249,15 +1249,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float catBarLeft = catScreen.X - catBarW * 0.5f;
                 float catBarTop = catTop - catHealthBarGapAboveSprite - catHealthBarHeight;
                 var catBarBg = new Rectangle(catBarLeft, catBarTop, catBarW, catHealthBarHeight);
-                Raylib.DrawRectangleRec(catBarBg, new Color((byte)48, (byte)28, (byte)52, (byte)255));
+                Raylib.DrawRectangleRec(catBarBg, HealthBarPalette.Background);
                 float catHpFrac = wc.MaxHealth > 0 ? wc.Health / (float)wc.MaxHealth : 0f;
                 if (catHpFrac > 0f)
                 {
                     var catBarFill = new Rectangle(catBarLeft, catBarTop, catBarW * catHpFrac, catHealthBarHeight);
-                    Raylib.DrawRectangleRec(catBarFill, new Color((byte)255, (byte)130, (byte)190, (byte)255));
+                    Raylib.DrawRectangleRec(catBarFill, HealthBarPalette.Fill(catHpFrac));
                 }
 
-                Raylib.DrawRectangleLinesEx(catBarBg, 1f, new Color(30, 30, 30, 255));
+                Raylib.DrawRectangleLinesEx(catBarBg, 1f, HealthBarPalette.Outline);
             }
 
             for (int i = 0; i < bullets.Count; i++)
@@ -1476,5 +1476,38 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Raylib.CloseWindow();
 
 
+    }
+}
+
+/// <summary>Shared health bar styling: fill interpolates green (high) → yellow (mid) → red (low).</summary>
+file static class HealthBarPalette
+{
+    static readonly Color Red = new((byte)220, (byte)45, (byte)55, (byte)255);
+    static readonly Color Yellow = new((byte)255, (byte)210, (byte)60, (byte)255);
+    static readonly Color Green = new((byte)55, (byte)200, (byte)95, (byte)255);
+
+    internal static Color Background => new((byte)22, (byte)22, (byte)26, (byte)255);
+
+    internal static Color Outline => new((byte)20, (byte)20, (byte)20, (byte)255);
+
+    internal static Color Fill(float healthFraction)
+    {
+        float t = Math.Clamp(healthFraction, 0f, 1f);
+        if (t <= 0.5f)
+        {
+            return LerpRgb(Red, Yellow, t * 2f);
+        }
+
+        return LerpRgb(Yellow, Green, (t - 0.5f) * 2f);
+    }
+
+    static Color LerpRgb(Color a, Color b, float u)
+    {
+        u = Math.Clamp(u, 0f, 1f);
+        return new Color(
+            (byte)MathF.Round(a.R + (b.R - a.R) * u),
+            (byte)MathF.Round(a.G + (b.G - a.G) * u),
+            (byte)MathF.Round(a.B + (b.B - a.B) * u),
+            (byte)255);
     }
 }
