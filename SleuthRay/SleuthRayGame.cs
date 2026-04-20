@@ -108,9 +108,10 @@ public sealed class SleuthRayGame : ISleuthRayGame
         // Along last aim direction: offset by ~half scaled gun width so the pivot sits past the torso, not inside it.
         const float gunPivotAlongAimExtraPx = 14f;
         const float gunFlashDuration = 0.22f;
-        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer)>(48);
+        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
+        const int maxCatsInInventory = 5;
         int catsInInventory = 3;
 
         // NPC shares player strip layout (16×20, 4 rows × 4 walk frames).
@@ -396,6 +397,23 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 wanderingCats[ci] = wc;
             }
 
+            if (catsInInventory < maxCatsInInventory)
+            {
+                for (int ci = wanderingCats.Count - 1; ci >= 0; ci--)
+                {
+                    if (catsInInventory >= maxCatsInInventory)
+                    {
+                        break;
+                    }
+
+                    if (Gameplay.WorldRectsOverlap(playerWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
+                    {
+                        wanderingCats.RemoveAt(ci);
+                        catsInInventory++;
+                    }
+                }
+            }
+
             float speed = playerVel.Length();
             // Walk animation speed follows movement; when slowing down, steps still advance (just slower).
             // After stopping, we "run out" a few frames to land on a rest pose (sprite frame 1) instead of freezing mid-stride.
@@ -587,7 +605,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     float dist = MathF.Sqrt(distSq);
                     Vector2 nd = toPlayer / dist;
-                    bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false));
+                    bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false, 0f));
                     wandererShootCooldown = wandererShootIntervalMin
                         + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
                     if (gunshotSoundReady)
@@ -694,7 +712,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     {
                         float distA = MathF.Sqrt(distSqA);
                         Vector2 ndA = toPlayerA / distA;
-                        bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false));
+                        bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false, 0f));
                         agentShootCooldown = wandererShootIntervalMin
                             + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
                         if (gunshotSoundReady)
@@ -792,13 +810,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Vector2 vel = dir * bulletSpeed;
-                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true));
+                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f));
                 catsInInventory--;
             }
 
             for (int i = bullets.Count - 1; i >= 0; i--)
             {
-                (Vector2 pos, Vector2 vel, bool fromPlayer) = bullets[i];
+                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown) = bullets[i];
+                hitCooldown = MathF.Max(0f, hitCooldown - dt);
                 Vector2 newPos = pos + vel * dt;
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
                     || map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
@@ -817,35 +836,45 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
                 else if (fromPlayer && wandererAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
                 {
-                    bullets.RemoveAt(i);
-                    wandererHitFlashTimer = wandererHitFlashDuration;
-                    wandererSpeech = WandererTalk.Pick(WandererTalk.Hurt);
-                    wandererSpeechTimer = wandererSpeechShowSeconds;
-                    wandererHealth--;
-                    if (wandererHealth <= 0)
+                    if (hitCooldown <= 0f)
                     {
-                        wandererAlive = false;
-                        wandererVel = Vector2.Zero;
-                        wandererSpeech = WandererTalk.Pick(WandererTalk.Death);
+                        hitCooldown = 0.20f;
+                        wandererHitFlashTimer = wandererHitFlashDuration;
+                        wandererSpeech = WandererTalk.Pick(WandererTalk.Hurt);
                         wandererSpeechTimer = wandererSpeechShowSeconds;
-                        wandererRespawnTimer = MathF.Max(wandererRespawnDelay, wandererSpeechShowSeconds + 0.45f);
+                        wandererHealth--;
+                        if (wandererHealth <= 0)
+                        {
+                            wandererAlive = false;
+                            wandererVel = Vector2.Zero;
+                            wandererSpeech = WandererTalk.Pick(WandererTalk.Death);
+                            wandererSpeechTimer = wandererSpeechShowSeconds;
+                            wandererRespawnTimer = MathF.Max(wandererRespawnDelay, wandererSpeechShowSeconds + 0.45f);
+                        }
+                        else
+                        {
+                            wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
+                        }
                     }
-                    else
-                    {
-                        wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
-                    }
+
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
                 }
                 else if (fromPlayer && agentAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
                 {
-                    bullets.RemoveAt(i);
-                    agentHitFlashTimer = wandererHitFlashDuration;
-                    agentHealth--;
-                    if (agentHealth <= 0)
+                    if (hitCooldown <= 0f)
                     {
-                        agentAlive = false;
-                        agentVel = Vector2.Zero;
-                        agentRespawnTimer = wandererRespawnDelay;
+                        hitCooldown = 0.20f;
+                        agentHitFlashTimer = wandererHitFlashDuration;
+                        agentHealth--;
+                        if (agentHealth <= 0)
+                        {
+                            agentAlive = false;
+                            agentVel = Vector2.Zero;
+                            agentRespawnTimer = wandererRespawnDelay;
+                        }
                     }
+
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
                 }
                 else if (!fromPlayer && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                 {
@@ -864,7 +893,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
                 else
                 {
-                    bullets[i] = (newPos, vel, fromPlayer);
+                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown);
                 }
             }
 
@@ -1063,7 +1092,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = 0; i < bullets.Count; i++)
             {
-                (Vector2 bPos, Vector2 bVel, bool bFromPlayer) = bullets[i];
+                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _) = bullets[i];
                 Vector2 screen = cameraOffsetSmoothed + bPos;
                 if (bFromPlayer)
                 {
