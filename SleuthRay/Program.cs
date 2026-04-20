@@ -1,19 +1,12 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using SleuthRay;
 using SleuthRay.Registry;
 
-namespace SleuthRay;
+var builder = Host.CreateApplicationBuilder(args);
+new SleuthRayGameRegistrar().Register(builder.Services);
 
-static class Program
-{
-    static void Main(string[] args)
-    {
-        var builder = Host.CreateApplicationBuilder(args);
-        builder.Services.RegisterSleuthRay();
+using var host = builder.Build();
 
-        using var host = builder.Build();
-
-        var game = host.Services.GetRequiredService<ISleuthRayGame>();
-        game.Run();
-    }
-}
+var game = host.Services.GetRequiredService<ISleuthRayGame>();
+game.Run();

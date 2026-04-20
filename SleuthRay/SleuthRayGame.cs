@@ -4,23 +4,46 @@ using Raylib_cs;
 
 namespace SleuthRay;
 
+public interface ISleuthRayGame
+{
+    void Run();
+}
+
 public sealed class SleuthRayGame : ISleuthRayGame
 {
     readonly SleuthRayOptions _options;
     readonly IEmbeddedResourceReader _resourceReader;
     readonly ICatNamePicker _catNamePicker;
     readonly IWandererTalkPicker _wandererTalkPicker;
+    readonly IGameplay _gameplay;
+    readonly IGunshotAudio _gunshotAudio;
+    readonly IGamepadMappings _gamepadMappings;
+    readonly ISpeechBubbleUi _speechBubbleUi;
+    readonly IInputReadbackOverlay _inputReadbackOverlay;
+    readonly IPlayerStatsMenuUi _playerStatsMenuUi;
 
     public SleuthRayGame(
         IOptions<SleuthRayOptions> optionsAccessor,
         IEmbeddedResourceReader resourceReader,
         ICatNamePicker catNamePicker,
-        IWandererTalkPicker wandererTalkPicker)
+        IWandererTalkPicker wandererTalkPicker,
+        IGameplay gameplay,
+        IGunshotAudio gunshotAudio,
+        IGamepadMappings gamepadMappings,
+        ISpeechBubbleUi speechBubbleUi,
+        IInputReadbackOverlay inputReadbackOverlay,
+        IPlayerStatsMenuUi playerStatsMenuUi)
     {
         _options = optionsAccessor.Value;
         _resourceReader = resourceReader;
         _catNamePicker = catNamePicker;
         _wandererTalkPicker = wandererTalkPicker;
+        _gameplay = gameplay;
+        _gunshotAudio = gunshotAudio;
+        _gamepadMappings = gamepadMappings;
+        _speechBubbleUi = speechBubbleUi;
+        _inputReadbackOverlay = inputReadbackOverlay;
+        _playerStatsMenuUi = playerStatsMenuUi;
     }
 
     public void Run()
@@ -38,7 +61,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
         Raylib.InitAudioDevice();
 
-        (int gamepadMappingsAccepted, string gamepadMappingsDetail) = GamepadMappings.TryLoad();
+        (int gamepadMappingsAccepted, string gamepadMappingsDetail) = _gamepadMappings.TryLoad();
 
         TileMap map = TileMap.LoadFromTmx(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, _options.MapTmxRelativePath)));
         RaylibTextures.SetTexturePixelFilter(map.TilesetTexture);
@@ -50,9 +73,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Texture2D catTexture = RaylibTextures.LoadTexturePixel("assets/cats/cat.png");
 
         // Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.
-        var gunshotVoices = new Sound[GunshotAudio.VoiceCount];
+        var gunshotVoices = new Sound[_gunshotAudio.VoiceCount];
         int gunshotVoiceNext = 0;
-        bool gunshotSoundReady = GunshotAudio.TryInitGunshotVoices(gunshotVoices, out string gunshotLoadDetail);
+        bool gunshotSoundReady = _gunshotAudio.TryInitGunshotVoices(gunshotVoices, out string gunshotLoadDetail);
         if (!gunshotSoundReady)
         {
             Console.WriteLine($"[SleuthRay] WARNING: Gunshot not loaded ({gunshotLoadDetail}). Shots will be silent.");
@@ -127,7 +150,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int catsInInventory = 3;
 
         // NPC shares player strip layout (16×20, 4 rows × 4 walk frames).
-        Vector2 wandererWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
+        Vector2 wandererWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
         Vector2 wandererVel = Vector2.Zero;
         Vector2 wandererWanderDir = new Vector2(1f, 0f);
         float wandererTurnTimer = 0f;
@@ -158,7 +181,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float wandererShootMaxRange = 540f;
 
         // Second hostile NPC (character_9 sheet); same strip layout and combat as wanderer, no dialogue.
-        Vector2 agentWorldPos = Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
+        Vector2 agentWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
         Vector2 agentVel = Vector2.Zero;
         Vector2 agentWanderDir = new Vector2(-1f, 0f);
         float agentTurnTimer = 0f;
@@ -238,7 +261,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
         var wanderingCats = new List<WanderingCat>(maxWanderingCats);
         wanderingCats.Add(WanderingCat.SpawnAt(
-            Gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
+            _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(140f, 90f), mapScale, playerHitHalfW, playerHitHalfH),
             catIdleRow,
             _catNamePicker.Pick()));
 
@@ -383,11 +406,11 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Vector2 desiredVel = moveDir * moveSpeed * moveScale;
             if (hasInput)
             {
-                playerVel = Gameplay.Approach(playerVel, desiredVel, accel * dt);
+                playerVel = _gameplay.Approach(playerVel, desiredVel, accel * dt);
             }
             else
             {
-                playerVel = Gameplay.Approach(playerVel, Vector2.Zero, friction * dt);
+                playerVel = _gameplay.Approach(playerVel, Vector2.Zero, friction * dt);
             }
 
             Vector2 moveDelta = playerVel * dt;
@@ -443,7 +466,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         break;
                     }
 
-                    if (Gameplay.WorldRectsOverlap(playerWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
+                    if (_gameplay.WorldRectsOverlap(playerWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
                     {
                         wanderingCats.RemoveAt(ci);
                         catsInInventory++;
@@ -523,7 +546,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     float ang = Random.Shared.NextSingle() * MathF.Tau;
                     Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 140f;
-                    wandererWorldPos = Gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+                    wandererWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
                     wandererVel = Vector2.Zero;
                     wandererWanderDir = new Vector2(1f, 0f);
                     wandererTurnTimer = 0f;
@@ -544,7 +567,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     float ang = Random.Shared.NextSingle() * MathF.Tau + 1.7f;
                     Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 155f;
-                    agentWorldPos = Gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+                    agentWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
                     agentVel = Vector2.Zero;
                     agentWanderDir = new Vector2(-1f, 0f);
                     agentTurnTimer = 0f;
@@ -567,12 +590,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             Vector2 wanderDesiredVel = wandererWanderDir * wandererSpeed;
-            wandererVel = Gameplay.Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
+            wandererVel = _gameplay.Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
 
             Vector2 npcDelta = wandererVel * dt;
             wandererWorldPos.X += npcDelta.X;
             bool wanderMapBlockX = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockX = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
+            bool wanderCatBlockX = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
             if (wanderMapBlockX || wanderCatBlockX)
             {
                 wandererWorldPos.X -= npcDelta.X;
@@ -585,7 +608,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             wandererWorldPos.Y += npcDelta.Y;
             bool wanderMapBlockY = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockY = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
+            bool wanderCatBlockY = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
             if (wanderMapBlockY || wanderCatBlockY)
             {
                 wandererWorldPos.Y -= npcDelta.Y;
@@ -608,7 +631,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 worldW,
                 worldH,
                 playerHitHalfW,
-                playerHitHalfH);
+                playerHitHalfH,
+                _gameplay);
 
             Vector2 wFace = wandererVel.LengthSquared() > 4f ? Vector2.Normalize(wandererVel) : wandererWanderDir;
             if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
@@ -638,7 +662,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float distSq = toPlayer.LengthSquared();
                 if (distSq > 40f * 40f
                     && distSq <= wandererShootMaxRange * wandererShootMaxRange
-                    && Gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf))
+                    && _gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf))
                 {
                     float dist = MathF.Sqrt(distSq);
                     Vector2 nd = toPlayer / dist;
@@ -648,7 +672,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     if (gunshotSoundReady)
                     {
                         Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                        gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
+                        gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
                     }
 
                     wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Shoot);
@@ -674,12 +698,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Vector2 agentDesiredVel = agentWanderDir * wandererSpeed;
-                agentVel = Gameplay.Approach(agentVel, agentDesiredVel, wandererAccel * dt);
+                agentVel = _gameplay.Approach(agentVel, agentDesiredVel, wandererAccel * dt);
 
                 Vector2 agentDelta = agentVel * dt;
                 agentWorldPos.X += agentDelta.X;
                 bool agentMapBlockX = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockX = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
+                bool agentCatBlockX = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
                 if (agentMapBlockX || agentCatBlockX)
                 {
                     agentWorldPos.X -= agentDelta.X;
@@ -692,7 +716,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 agentWorldPos.Y += agentDelta.Y;
                 bool agentMapBlockY = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockY = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH);
+                bool agentCatBlockY = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
                 if (agentMapBlockY || agentCatBlockY)
                 {
                     agentWorldPos.Y -= agentDelta.Y;
@@ -715,7 +739,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     worldW,
                     worldH,
                     playerHitHalfW,
-                    playerHitHalfH);
+                    playerHitHalfH,
+                    _gameplay);
 
                 Vector2 aFace = agentVel.LengthSquared() > 4f ? Vector2.Normalize(agentVel) : agentWanderDir;
                 if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
@@ -745,7 +770,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     float distSqA = toPlayerA.LengthSquared();
                     if (distSqA > 40f * 40f
                         && distSqA <= wandererShootMaxRange * wandererShootMaxRange
-                        && Gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf))
+                        && _gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf))
                     {
                         float distA = MathF.Sqrt(distSqA);
                         Vector2 ndA = toPlayerA / distA;
@@ -755,7 +780,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         if (gunshotSoundReady)
                         {
                             Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                            gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
+                            gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
                         }
                     }
                     else
@@ -785,12 +810,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
                 else
                 {
-                    aimDir = Gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+                    aimDir = _gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
                 }
             }
             else
             {
-                aimDir = Gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
+                aimDir = _gameplay.DefaultAimDirFromMovement(hasInput, moveDir, playerVel, currentRow);
             }
 
             lastShotDir = aimDir;
@@ -819,7 +844,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     triggerR2FirePressed = true;
                 }
 
-                float rtPressure = Gameplay.TriggerAxisToPressure(
+                float rtPressure = _gameplay.TriggerAxisToPressure(
                     Raylib.GetGamepadAxisMovement(g, GamepadAxis.GAMEPAD_AXIS_RIGHT_TRIGGER));
                 if (rtPressure < r2AnalogReleaseBelow)
                 {
@@ -843,7 +868,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 if (gunshotSoundReady)
                 {
                     Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                    gunshotVoiceNext = (gunshotVoiceNext + 1) % GunshotAudio.VoiceCount;
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
                 }
 
                 Vector2 vel = dir * bulletSpeed;
@@ -865,13 +890,13 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         && wanderingCats.Count < maxWanderingCats
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
-                        Vector2 spawnPos = Gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
+                        Vector2 spawnPos = _gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
                         wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName));
                     }
 
                     bullets.RemoveAt(i);
                 }
-                else if (fromPlayer && wandererAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
+                else if (fromPlayer && wandererAlive && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
                 {
                     if (hitCooldown <= 0f)
                     {
@@ -896,7 +921,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                     bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                 }
-                else if (fromPlayer && agentAlive && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
+                else if (fromPlayer && agentAlive && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
                 {
                     if (hitCooldown <= 0f)
                     {
@@ -913,7 +938,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                     bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                 }
-                else if (!fromPlayer && Gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
+                else if (!fromPlayer && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                 {
                     bullets.RemoveAt(i);
                     playerHitFlashTimer = wandererHitFlashDuration;
@@ -989,7 +1014,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
                 {
-                    SpeechBubbleUi.Draw(
+                    _speechBubbleUi.Draw(
                         screenWidth,
                         screenHeight,
                         wanderScreen.X,
@@ -1006,7 +1031,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Vector2 corpseScreen = cameraOffsetSmoothed + wandererWorldPos;
                 float corpseCharY = corpseScreen.Y - destH / 2f;
                 float corpseBarTop = corpseCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-                SpeechBubbleUi.Draw(
+                _speechBubbleUi.Draw(
                     screenWidth,
                     screenHeight,
                     corpseScreen.X,
@@ -1124,7 +1149,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             Raylib.DrawRectangleLinesEx(pBarBg, 1f, new Color((byte)20, (byte)28, (byte)48, (byte)255));
 
-            Gameplay.DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
+            _gameplay.DrawAimReticle(playerScreenPos, lastShotDir, aimReticleDistancePx, aimReticleArmPx, aimReticleLineThick);
 
             if (gunFlashTimer > 0f)
             {
@@ -1286,7 +1311,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 float latePickedLx = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_X) : 0f;
                 float latePickedLy = gamepad >= 0 ? Raylib.GetGamepadAxisMovement(gamepad, GamepadAxis.GAMEPAD_AXIS_LEFT_Y) : 0f;
 
-                InputReadbackOverlay.Draw(
+                _inputReadbackOverlay.Draw(
                     gamepad,
                     stick,
                     keyHeld,
@@ -1306,7 +1331,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             if (statsMenuOpen)
             {
-                PlayerStatsMenuUi.Draw(
+                _playerStatsMenuUi.Draw(
                     screenWidth,
                     screenHeight,
                     playerHealth,
@@ -1351,7 +1376,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         map.Unload();
         if (gunshotSoundReady)
         {
-            for (int gi = 0; gi < GunshotAudio.VoiceCount; gi++)
+            for (int gi = 0; gi < _gunshotAudio.VoiceCount; gi++)
             {
                 Raylib.UnloadSound(gunshotVoices[gi]);
             }

@@ -1,13 +1,22 @@
 using System.Reflection;
 using Raylib_cs;
 
-internal static class GunshotAudio
+namespace SleuthRay;
+
+public interface IGunshotAudio
 {
-    public const int VoiceCount = 6;
+    int VoiceCount { get; }
+    bool TryInitGunshotVoices(Sound[] voices, out string detail);
+}
+
+internal sealed class GunshotAudio : IGunshotAudio
+{
     public const string EmbeddedResourceName = "gunshot.wav";
 
+    public int VoiceCount => 6;
+
     /// <summary>Optional <c>SLEUTHRAY_GUNSHOT_WAV</c> (full path to a WAV) overrides the embedded gunshot.</summary>
-    public static string? ResolveGunshotOverridePath()
+    static string? ResolveGunshotOverridePath()
     {
         string? fromEnv = Environment.GetEnvironmentVariable("SLEUTHRAY_GUNSHOT_WAV");
         if (string.IsNullOrWhiteSpace(fromEnv))
@@ -31,7 +40,7 @@ internal static class GunshotAudio
         return null;
     }
 
-    public static byte[]? ReadManifestResourceBytesOrNull(Assembly asm, string resourceName)
+    static byte[]? ReadManifestResourceBytesOrNull(Assembly asm, string resourceName)
     {
         using Stream? stream = asm.GetManifestResourceStream(resourceName);
         if (stream is null)
@@ -44,7 +53,7 @@ internal static class GunshotAudio
         return ms.ToArray();
     }
 
-    public static void CleanupPartialGunshotVoices(Sound[] voices)
+    static void CleanupPartialGunshotVoices(Sound[] voices)
     {
         for (int j = 0; j < voices.Length; j++)
         {
@@ -57,7 +66,7 @@ internal static class GunshotAudio
         }
     }
 
-    public static void ConfigureGunshotVoices(Sound[] voices)
+    static void ConfigureGunshotVoices(Sound[] voices)
     {
         for (int i = 0; i < voices.Length; i++)
         {
@@ -66,7 +75,7 @@ internal static class GunshotAudio
         }
     }
 
-    public static bool TryLoadGunshotVoicesFromFile(string path, Sound[] voices, out string error)
+    static bool TryLoadGunshotVoicesFromFile(string path, Sound[] voices, out string error)
     {
         error = "";
         for (int gi = 0; gi < voices.Length; gi++)
@@ -83,7 +92,7 @@ internal static class GunshotAudio
         return true;
     }
 
-    public static bool TryLoadGunshotVoicesFromEmbedded(byte[] wavBytes, Sound[] voices, out string error)
+    static bool TryLoadGunshotVoicesFromEmbedded(byte[] wavBytes, Sound[] voices, out string error)
     {
         error = "";
         for (int gi = 0; gi < voices.Length; gi++)
@@ -111,7 +120,7 @@ internal static class GunshotAudio
         return true;
     }
 
-    public static bool TryInitGunshotVoices(Sound[] voices, out string detail)
+    public bool TryInitGunshotVoices(Sound[] voices, out string detail)
     {
         if (voices.Length != VoiceCount)
         {

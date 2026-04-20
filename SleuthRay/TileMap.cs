@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Xml.Linq;
 using Raylib_cs;
 
-sealed class TileMap
+public sealed class TileMap
 {
     public required int Width { get; init; }
     public required int Height { get; init; }

@@ -1,8 +1,25 @@
 using Raylib_cs;
 
-internal static class SpeechBubbleUi
+namespace SleuthRay;
+
+public interface ISpeechBubbleUi
 {
-    public static List<string> WrapLines(string text, int fontSize, float maxWidth)
+    List<string> WrapLines(string text, int fontSize, float maxWidth);
+    void Draw(
+        int viewportW,
+        int viewportH,
+        float centerX,
+        float barTopY,
+        string text,
+        int fontSize,
+        float maxContentWidth,
+        float pad);
+}
+
+internal sealed class SpeechBubbleUi : ISpeechBubbleUi
+{
+    /// <inheritdoc />
+    public List<string> WrapLines(string text, int fontSize, float maxWidth)
     {
         var result = new List<string>();
         if (string.IsNullOrWhiteSpace(text))
@@ -35,8 +52,8 @@ internal static class SpeechBubbleUi
         return result;
     }
 
-    /// <summary>Rounded speech bubble above the wanderer's health bar (screen space).</summary>
-    public static void Draw(
+    /// <inheritdoc />
+    public void Draw(
         int viewportW,
         int viewportH,
         float centerX,

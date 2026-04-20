@@ -251,11 +251,11 @@ internal struct WanderingCat
         c.WorldPos.Y = Math.Clamp(c.WorldPos.Y, p.HitHalfH, Math.Max(p.HitHalfH, worldH - p.HitHalfH));
     }
 
-    public static bool NpcOverlapsAnyCat(Vector2 npcCenter, float npcHalfW, float npcHalfH, List<WanderingCat> cats, float catHalfW, float catHalfH)
+    public static bool NpcOverlapsAnyCat(Vector2 npcCenter, float npcHalfW, float npcHalfH, List<WanderingCat> cats, float catHalfW, float catHalfH, IGameplay gameplay)
     {
         for (int i = 0; i < cats.Count; i++)
         {
-            if (Gameplay.WorldRectsOverlap(npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH))
+            if (gameplay.WorldRectsOverlap(npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH))
             {
                 return true;
             }
@@ -264,16 +264,16 @@ internal struct WanderingCat
         return false;
     }
 
-    public static void NpcPushOutOfOverlappingCats(ref Vector2 npcCenter, float npcHalfW, float npcHalfH, List<WanderingCat> cats, float catHalfW, float catHalfH, float worldW, float worldH, float clampHalfW, float clampHalfH)
+    public static void NpcPushOutOfOverlappingCats(ref Vector2 npcCenter, float npcHalfW, float npcHalfH, List<WanderingCat> cats, float catHalfW, float catHalfH, float worldW, float worldH, float clampHalfW, float clampHalfH, IGameplay gameplay)
     {
         for (int i = 0; i < cats.Count; i++)
         {
-            if (!Gameplay.WorldRectsOverlap(npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH))
+            if (!gameplay.WorldRectsOverlap(npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH))
             {
                 continue;
             }
 
-            Gameplay.PushOutOfWorldRect(ref npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH);
+            gameplay.PushOutOfWorldRect(ref npcCenter, npcHalfW, npcHalfH, cats[i].WorldPos, catHalfW, catHalfH);
             npcCenter.X = Math.Clamp(npcCenter.X, clampHalfW, Math.Max(clampHalfW, worldW - clampHalfW));
             npcCenter.Y = Math.Clamp(npcCenter.Y, clampHalfH, Math.Max(clampHalfH, worldH - clampHalfH));
         }

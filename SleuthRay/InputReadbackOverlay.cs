@@ -1,10 +1,32 @@
 using System.Numerics;
 using Raylib_cs;
 
-internal static class InputReadbackOverlay
+namespace SleuthRay;
+
+public interface IInputReadbackOverlay
 {
-    /// <summary>Shows raw reads from keyboard and every gamepad slot so we can see which index carries the stick.</summary>
-    public static void Draw(
+    void Draw(
+        int movementGamepad,
+        Vector2 movementStick,
+        bool keyHeld,
+        Vector2 keyInput,
+        bool stickHeld,
+        bool hasInput,
+        Vector2 moveDir,
+        float moveScale,
+        int gamepadMappingsAccepted,
+        string gamepadMappingsDetail,
+        int frameIndex,
+        float lateGp0Lx,
+        float lateGp0Ly,
+        float latePickedLx,
+        float latePickedLy);
+}
+
+internal sealed class InputReadbackOverlay : IInputReadbackOverlay
+{
+    /// <inheritdoc />
+    public void Draw(
         int movementGamepad,
         Vector2 movementStick,
         bool keyHeld,

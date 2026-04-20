@@ -21,3 +21,5 @@ When writing or refactoring C# code:
 - Static classes are acceptable only for stateless, pure helper methods (like Math or String extensions).
 
 Favor clean, injectable classes with interfaces where it improves maintainability and testability.
+
+When an iterface has a single implementation, they should share a file.

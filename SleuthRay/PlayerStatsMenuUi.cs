@@ -3,9 +3,23 @@ using Raylib_cs;
 
 namespace SleuthRay;
 
-internal static class PlayerStatsMenuUi
+public interface IPlayerStatsMenuUi
 {
-    public static void Draw(
+    void Draw(
+        int screenW,
+        int screenH,
+        int health,
+        int maxHealth,
+        Vector2 worldPos,
+        float mapTileW,
+        float mapTileH,
+        float mapScale);
+}
+
+internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
+{
+    /// <inheritdoc />
+    public void Draw(
         int screenW,
         int screenH,
         int health,

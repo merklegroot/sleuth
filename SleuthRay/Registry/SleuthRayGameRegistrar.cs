@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using SleuthRay;
 
 namespace SleuthRay.Registry;
 
-public static class SleuthRayGameRegistry
+public sealed class SleuthRayGameRegistrar
 {
-    public static IServiceCollection RegisterSleuthRay(this IServiceCollection services) =>
+    public void Register(IServiceCollection services)
+    {
         services
             .Configure<SleuthRayOptions>(_ => { })
             .AddSingleton<IEmbeddedResourceReader, EmbeddedResourceReader>()
@@ -12,5 +14,12 @@ public static class SleuthRayGameRegistry
             .AddSingleton<ICatNamePicker, CatNamePicker>()
             .AddSingleton<IWandererTalkRepo, WandererTalkRepo>()
             .AddSingleton<IWandererTalkPicker, WandererTalkPicker>()
+            .AddSingleton<IGameplay, Gameplay>()
+            .AddSingleton<IGunshotAudio, GunshotAudio>()
+            .AddSingleton<IGamepadMappings, GamepadMappings>()
+            .AddSingleton<ISpeechBubbleUi, SpeechBubbleUi>()
+            .AddSingleton<IInputReadbackOverlay, InputReadbackOverlay>()
+            .AddSingleton<IPlayerStatsMenuUi, PlayerStatsMenuUi>()
             .AddSingleton<ISleuthRayGame, SleuthRayGame>();
+    }
 }

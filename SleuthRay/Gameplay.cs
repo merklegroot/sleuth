@@ -1,10 +1,25 @@
 using System.Numerics;
 using Raylib_cs;
 
-internal static class Gameplay
+namespace SleuthRay;
+
+public interface IGameplay
 {
-    /// <summary>Keyboard / coasting aim when the right stick is centered or no gamepad.</summary>
-    public static Vector2 DefaultAimDirFromMovement(bool hasInput, Vector2 moveDir, Vector2 playerVel, int currentRow)
+    Vector2 DefaultAimDirFromMovement(bool hasInput, Vector2 moveDir, Vector2 playerVel, int currentRow);
+    void DrawAimReticle(Vector2 playerScreenCenter, Vector2 aimDir, float distancePx, float armPx, float thick);
+    float TriggerAxisToPressure(float raw);
+    Vector2 Approach(Vector2 current, Vector2 target, float maxDelta);
+    Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH);
+    bool LineOfSightClear(TileMap map, Vector2 from, Vector2 to, float mapScale, float probeHalf);
+    bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH);
+    bool WorldRectsOverlap(Vector2 aCenter, float aHalfW, float aHalfH, Vector2 bCenter, float bHalfW, float bHalfH);
+    void PushOutOfWorldRect(ref Vector2 mover, float moverHalfW, float moverHalfH, Vector2 blocker, float blockerHalfW, float blockerHalfH);
+}
+
+internal sealed class Gameplay : IGameplay
+{
+    /// <inheritdoc />
+    public Vector2 DefaultAimDirFromMovement(bool hasInput, Vector2 moveDir, Vector2 playerVel, int currentRow)
     {
         if (hasInput)
         {
@@ -26,7 +41,8 @@ internal static class Gameplay
         };
     }
 
-    public static void DrawAimReticle(Vector2 playerScreenCenter, Vector2 aimDir, float distancePx, float armPx, float thick)
+    /// <inheritdoc />
+    public void DrawAimReticle(Vector2 playerScreenCenter, Vector2 aimDir, float distancePx, float armPx, float thick)
     {
         if (aimDir.LengthSquared() < 1e-6f)
         {
@@ -41,8 +57,8 @@ internal static class Gameplay
         Raylib.DrawLineEx(c - perp * armPx, c + perp * armPx, thick, col);
     }
 
-    /// <summary>Maps GLFW/Raylib trigger axis (often 0..1 or -1..1) to 0..1 pressure for R2/L2-style axes.</summary>
-    public static float TriggerAxisToPressure(float raw)
+    /// <inheritdoc />
+    public float TriggerAxisToPressure(float raw)
     {
         if (raw < 0f)
         {
@@ -52,7 +68,8 @@ internal static class Gameplay
         return Math.Clamp(raw, 0f, 1f);
     }
 
-    public static Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
+    /// <inheritdoc />
+    public Vector2 Approach(Vector2 current, Vector2 target, float maxDelta)
     {
         Vector2 delta = target - current;
         float dist = delta.Length();
@@ -64,8 +81,8 @@ internal static class Gameplay
         return current + delta / dist * maxDelta;
     }
 
-    /// <summary>Uses <paramref name="preferred"/> if clear; otherwise nearest tile center in expanding Chebyshev rings.</summary>
-    public static Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH)
+    /// <inheritdoc />
+    public Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH)
     {
         if (!m.OverlapsBlockingTile(preferred, scale, halfW, halfH))
         {
@@ -110,8 +127,8 @@ internal static class Gameplay
         return preferred;
     }
 
-    /// <summary>Ray from NPC to player: no blocking tile between them (same probe size as bullets).</summary>
-    public static bool LineOfSightClear(TileMap map, Vector2 from, Vector2 to, float mapScale, float probeHalf)
+    /// <inheritdoc />
+    public bool LineOfSightClear(TileMap map, Vector2 from, Vector2 to, float mapScale, float probeHalf)
     {
         Vector2 d = to - from;
         float len = d.Length();
@@ -141,7 +158,8 @@ internal static class Gameplay
         return true;
     }
 
-    public static bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH)
+    /// <inheritdoc />
+    public bool CircleIntersectsWorldRect(Vector2 circleCenter, float radius, Vector2 rectCenter, float halfW, float halfH)
     {
         float nx = Math.Clamp(circleCenter.X, rectCenter.X - halfW, rectCenter.X + halfW);
         float ny = Math.Clamp(circleCenter.Y, rectCenter.Y - halfH, rectCenter.Y + halfH);
@@ -150,12 +168,13 @@ internal static class Gameplay
         return dx * dx + dy * dy <= radius * radius;
     }
 
-    public static bool WorldRectsOverlap(Vector2 aCenter, float aHalfW, float aHalfH, Vector2 bCenter, float bHalfW, float bHalfH) =>
+    /// <inheritdoc />
+    public bool WorldRectsOverlap(Vector2 aCenter, float aHalfW, float aHalfH, Vector2 bCenter, float bHalfW, float bHalfH) =>
         MathF.Abs(aCenter.X - bCenter.X) < (aHalfW + bHalfW)
         && MathF.Abs(aCenter.Y - bCenter.Y) < (aHalfH + bHalfH);
 
-    /// <summary>Separates overlapping world AABBs by moving <paramref name="mover"/> along the shallow penetration axis.</summary>
-    public static void PushOutOfWorldRect(ref Vector2 mover, float moverHalfW, float moverHalfH, Vector2 blocker, float blockerHalfW, float blockerHalfH)
+    /// <inheritdoc />
+    public void PushOutOfWorldRect(ref Vector2 mover, float moverHalfW, float moverHalfH, Vector2 blocker, float blockerHalfW, float blockerHalfH)
     {
         float dx = mover.X - blocker.X;
         float dy = mover.Y - blocker.Y;

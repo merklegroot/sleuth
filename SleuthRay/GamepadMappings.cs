@@ -1,9 +1,17 @@
 using Raylib_cs;
 
-internal static class GamepadMappings
+namespace SleuthRay;
+
+public interface IGamepadMappings
 {
-    /// <summary>Loads SDL_GameControllerDB-format strings into GLFW via Raylib so macOS Xbox pads get correct axis/button mapping.</summary>
-    public static (int accepted, string detail) TryLoad()
+    (int accepted, string detail) TryLoad();
+    string FilterGamepadMappingText(string raw);
+}
+
+internal sealed class GamepadMappings : IGamepadMappings
+{
+    /// <inheritdoc />
+    public (int accepted, string detail) TryLoad()
     {
         string baseDir = AppContext.BaseDirectory;
         string full = Path.Combine(baseDir, "assets", "gamecontrollerdb.txt");
@@ -26,7 +34,8 @@ internal static class GamepadMappings
         return (0, "no assets/gamecontrollerdb*.txt");
     }
 
-    public static string FilterGamepadMappingText(string raw)
+    /// <inheritdoc />
+    public string FilterGamepadMappingText(string raw)
     {
         string[] lines = raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
         var kept = new List<string>(lines.Length);

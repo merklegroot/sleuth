@@ -1,5 +1,8 @@
 using Raylib_cs;
 
+namespace SleuthRay;
+
+/// <summary>Stateless texture helpers (point filtering).</summary>
 internal static class RaylibTextures
 {
     public static void SetTexturePixelFilter(Texture2D tex) =>
