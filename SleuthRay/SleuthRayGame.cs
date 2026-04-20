@@ -1117,6 +1117,22 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Raylib.DrawText(hintLine2, hx + 2, hy + 2, hintFont, hintShadow);
             Raylib.DrawText(hintLine2, hx, hy, hintFont, hintFg);
 
+            string ammoText = $"Cats: {catsInInventory}";
+            int ammoFont = hintFont;
+            int ammoPad = 10;
+            int ammoW = Raylib.MeasureText(ammoText, ammoFont);
+            int ammoBoxW = ammoW + ammoPad * 2;
+            int ammoBoxH = ammoFont + ammoPad * 2;
+            int ammoBoxX = hintMargin;
+            int ammoBoxY = hintBoxY - ammoBoxH - 10;
+            var ammoBg = new Rectangle(ammoBoxX, ammoBoxY, ammoBoxW, ammoBoxH);
+            Raylib.DrawRectangleRec(ammoBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
+            Raylib.DrawRectangleLinesEx(ammoBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
+            int ammoTextX = ammoBoxX + ammoPad;
+            int ammoTextY = ammoBoxY + ammoPad;
+            Raylib.DrawText(ammoText, ammoTextX + 2, ammoTextY + 2, ammoFont, hintShadow);
+            Raylib.DrawText(ammoText, ammoTextX, ammoTextY, ammoFont, hintFg);
+
             if (showInputDebugOverlay)
             {
                 Raylib.PollInputEvents();
