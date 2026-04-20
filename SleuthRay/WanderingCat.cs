@@ -37,6 +37,7 @@ internal struct WanderingCat
     public Vector2 WorldPos;
     public Vector2 HomePos;
     public string Name;
+    public string DebugAction;
     public bool IsWalking;
     public float BehaviorTimer;
     public int WalkFacingSign;
@@ -54,6 +55,7 @@ internal struct WanderingCat
         WorldPos = worldPos,
         HomePos = worldPos,
         Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
+        DebugAction = "spawn",
         IsWalking = false,
         BehaviorTimer = 0.8f + Random.Shared.NextSingle() * 2f,
         WalkFacingSign = 1,
@@ -205,6 +207,21 @@ internal struct WanderingCat
         }
 
         bool moving = blendedVel.LengthSquared() > 4f;
+        bool returning = returnW > 0.05f;
+        bool hesitating = returning && !moving && c.BehaviorTimer > 0.05f;
+        if (hesitating)
+        {
+            c.DebugAction = $"hesitate ({c.BehaviorTimer:0.0}s)";
+        }
+        else if (returning)
+        {
+            c.DebugAction = moving ? $"return ({returnW:0.00})" : $"return ({returnW:0.00}) idle";
+        }
+        else
+        {
+            c.DebugAction = moving ? "wander" : "idle";
+        }
+
         if (!moving)
         {
             c.DrawRow = p.IdleRow;

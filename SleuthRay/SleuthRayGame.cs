@@ -1057,6 +1057,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, Color.WHITE);
                 Raylib.DrawRectangleLinesEx(catDest, spriteBoundsThick, spriteBoundsCol);
 
+                if (wc.DebugAction.Length > 0)
+                {
+                    const int catDebugFontPx = 14;
+                    int dbgW = Raylib.MeasureText(wc.DebugAction, catDebugFontPx);
+                    int dbgX = (int)(catScreen.X - dbgW * 0.5f);
+                    int dbgY = (int)(catTop - 34f);
+                    var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
+                    var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
+                    Raylib.DrawText(wc.DebugAction, dbgX + 1, dbgY + 1, catDebugFontPx, dbgShadow);
+                    Raylib.DrawText(wc.DebugAction, dbgX, dbgY, catDebugFontPx, dbgFg);
+                }
+
                 if (wc.Name.Length > 0)
                 {
                     const int catNameFontPx = 16;
