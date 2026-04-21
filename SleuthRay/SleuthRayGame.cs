@@ -162,6 +162,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         float slideCooldownTimer = 0f;
         Vector2 slideDir = new(0f, 1f);
         var slideDust = new List<(Vector2 Pos, Vector2 Vel, float Age, float Lifetime, float Radius)>(192);
+        var slideHitEnemyIds = new HashSet<int>();
 
         const int frameWidth = 16;
         const int frameHeight = 20;
@@ -604,6 +605,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     slideDir = Vector2.Normalize(dir);
                     slideTimer = slideDurationSeconds;
                     sliding = true;
+                    slideHitEnemyIds.Clear();
                 }
             }
 
@@ -874,6 +876,76 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 enemies[ei] = e;
+            }
+
+            // Slide hit: damage and shove enemies once per slide.
+            if (slideTimer > 0f)
+            {
+                const float slideShoveDist = 18f;
+                const float slideShoveVel = 240f;
+                for (int ei = 0; ei < enemies.Count; ei++)
+                {
+                    Enemy e = enemies[ei];
+                    if (!e.Alive)
+                    {
+                        continue;
+                    }
+
+                    if (slideHitEnemyIds.Contains(e.Id))
+                    {
+                        continue;
+                    }
+
+                    if (!_gameplay.WorldRectsOverlap(playerWorldPos, playerHitHalfW, playerHitHalfH, e.WorldPos, playerHitHalfW, playerHitHalfH))
+                    {
+                        continue;
+                    }
+
+                    slideHitEnemyIds.Add(e.Id);
+
+                    Vector2 pushDir = e.WorldPos - playerWorldPos;
+                    if (pushDir.LengthSquared() <= 1e-6f)
+                    {
+                        pushDir = slideDir;
+                    }
+                    else
+                    {
+                        pushDir = Vector2.Normalize(pushDir);
+                    }
+
+                    e.HitFlashTimer = enemyHitFlashDuration;
+                    e.Health = Math.Max(0, e.Health - 1);
+                    if (e.Health <= 0)
+                    {
+                        e.Health = 0;
+                        e.Alive = false;
+                        e.Vel = Vector2.Zero;
+                        e.RespawnTimer = enemyRespawnDelay;
+                        if (e.Id == 0)
+                        {
+                            wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Death);
+                            wandererSpeechTimer = wandererSpeechShowSeconds;
+                            e.RespawnTimer = MathF.Max(e.RespawnTimer, wandererSpeechShowSeconds + 0.45f);
+                        }
+                    }
+                    else
+                    {
+                        e.WorldPos += pushDir * slideShoveDist;
+                        e.Vel += pushDir * slideShoveVel;
+                        if (e.Id == 0)
+                        {
+                            wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Hurt);
+                            wandererSpeechTimer = wandererSpeechShowSeconds;
+                            wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
+                        }
+                    }
+
+                    // Clamp to map bounds (keep collision box inside the map rectangle).
+                    e.WorldPos.X = Math.Clamp(e.WorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
+                    e.WorldPos.Y = Math.Clamp(e.WorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
+
+                    enemies[ei] = e;
+                }
             }
 
             // Camera follow (used for map + bullets this frame).
