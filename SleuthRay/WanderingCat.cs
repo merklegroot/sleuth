@@ -54,6 +54,10 @@ internal struct WanderingCat
     public float HitFlashTimer;
     /// <summary>At 0 health the cat stops moving on its own but stays in the world until picked up.</summary>
     public bool Disabled;
+    public Vector2 NavWaypoint;
+    public float NavReplanTimer;
+    public int NavGoalTx;
+    public int NavGoalTy;
 
     public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth)
     {
@@ -79,10 +83,14 @@ internal struct WanderingCat
             Health = mh,
             HitFlashTimer = 0f,
             Disabled = false,
+            NavWaypoint = worldPos,
+            NavReplanTimer = 0f,
+            NavGoalTx = -1,
+            NavGoalTy = -1,
         };
     }
 
-    public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p)
+    public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p, TilePathfinder? pathfinder)
     {
         c.HitFlashTimer = MathF.Max(0f, c.HitFlashTimer - dt);
         if (c.Disabled)
@@ -189,7 +197,25 @@ internal struct WanderingCat
             }
 
             Vector2 returnTarget = playerWorldPos + c.ReturnTargetOffset;
-            Vector2 toTarget = returnTarget - c.WorldPos;
+            Vector2 navTarget = returnTarget;
+            if (returnW > 0.05f && pathfinder is not null)
+            {
+                c.NavReplanTimer = MathF.Max(0f, c.NavReplanTimer - dt);
+                var goalTile = pathfinder.WorldToTile(returnTarget);
+                bool goalChanged = goalTile.Tx != c.NavGoalTx || goalTile.Ty != c.NavGoalTy;
+                bool reachedWaypoint = Vector2.DistanceSquared(c.WorldPos, c.NavWaypoint) < 18f * 18f;
+                if (goalChanged || reachedWaypoint || c.NavReplanTimer <= 0f)
+                {
+                    c.NavGoalTx = goalTile.Tx;
+                    c.NavGoalTy = goalTile.Ty;
+                    c.NavWaypoint = pathfinder.NextStepWorld(c.WorldPos, returnTarget);
+                    c.NavReplanTimer = 0.35f;
+                }
+
+                navTarget = c.NavWaypoint;
+            }
+
+            Vector2 toTarget = navTarget - c.WorldPos;
             float toTargetLenSq = toTarget.LengthSquared();
             if (toTargetLenSq > 0.001f)
             {

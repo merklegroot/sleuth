@@ -159,18 +159,24 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const int maxCatsInInventory = 5;
         int catsInInventory = 3;
 
+        // Pathfinder grids (cached per map+hitbox); used for smarter NPC/cat navigation.
+        var npcPathfinder = new TilePathfinder(map, mapScale, playerHitHalfW, playerHitHalfH);
+
         // NPC shares player strip layout (16×20, 4 rows × 4 walk frames).
         Vector2 wandererWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
         Vector2 wandererVel = Vector2.Zero;
-        Vector2 wandererWanderDir = new Vector2(1f, 0f);
-        float wandererTurnTimer = 0f;
+        Vector2 wandererWanderDir = new Vector2(1f, 0f); // fallback facing when not moving
+        Vector2 wandererFaceDir = new Vector2(1f, 0f);
+        float wandererTurnTimer = 0f; // drift refresh timer
+        Vector2 wandererNavTarget = wandererWorldPos;
+        float wandererRepathCooldown = 0f;
+        float wandererStuckTimer = 0f;
+        Vector2 wandererLastPos = wandererWorldPos;
         int wandererCycleIndex = 0;
         int wandererRow = 0;
         float wandererAnimTimer = 0f;
         const float wandererSpeed = 95f;
         const float wandererAccel = 1600f;
-        const float wandererTurnMin = 1.1f;
-        const float wandererTurnMax = 3.2f;
         const float wandererAnimFrameSeconds = 0.2f;
         bool wandererAlive = true;
         float wandererRespawnTimer = 0f;
@@ -194,7 +200,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Vector2 agentWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
         Vector2 agentVel = Vector2.Zero;
         Vector2 agentWanderDir = new Vector2(-1f, 0f);
+        Vector2 agentFaceDir = new Vector2(-1f, 0f);
         float agentTurnTimer = 0f;
+        Vector2 agentNavTarget = agentWorldPos;
+        float agentRepathCooldown = 0f;
+        float agentStuckTimer = 0f;
+        Vector2 agentLastPos = agentWorldPos;
         int agentCycleIndex = 0;
         int agentRow = 0;
         float agentAnimTimer = 0f;
@@ -204,6 +215,10 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int agentHealth = agentMaxHealth;
         float agentHitFlashTimer = 0f;
         float agentShootCooldown = 2.2f + Random.Shared.NextSingle() * 1.4f;
+
+        // Movement "drift" so enemies don't micro-correct perfectly.
+        Vector2 wandererDriftDir = Vector2.Zero;
+        Vector2 agentDriftDir = Vector2.Zero;
 
         // Cat: 64×64 frames; sheet rows are 1-based in art specs (idle = row 13 → index 12), 8 idle frames.
         const int catFrameSize = 64;
@@ -218,6 +233,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float catDrawScale = 1f;
         const float catHitHalfW = 14f;
         const float catHitHalfH = 12f;
+        var catPathfinder = new TilePathfinder(map, mapScale, catHitHalfW, catHitHalfH);
         const float catWalkSpeed = 50f;
         const float catLeashRadius = 110f;
         const float catIdleWaitMin = 1.2f;
@@ -484,7 +500,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             for (int ci = 0; ci < wanderingCats.Count; ci++)
             {
                 WanderingCat wc = wanderingCats[ci];
-                WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, playerWorldPos, catWanderParams);
+                WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, playerWorldPos, catWanderParams, catPathfinder);
                 wanderingCats[ci] = wc;
             }
 
@@ -580,7 +596,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     wandererWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
                     wandererVel = Vector2.Zero;
                     wandererWanderDir = new Vector2(1f, 0f);
+                    wandererFaceDir = new Vector2(1f, 0f);
                     wandererTurnTimer = 0f;
+                    wandererNavTarget = wandererWorldPos;
+                    wandererRepathCooldown = 0f;
+                    wandererStuckTimer = 0f;
+                    wandererLastPos = wandererWorldPos;
                     wandererHealth = wandererMaxHealth;
                     wandererHitFlashTimer = 0f;
                     wandererAlive = true;
@@ -601,7 +622,12 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     agentWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
                     agentVel = Vector2.Zero;
                     agentWanderDir = new Vector2(-1f, 0f);
+                    agentFaceDir = new Vector2(-1f, 0f);
                     agentTurnTimer = 0f;
+                    agentNavTarget = agentWorldPos;
+                    agentRepathCooldown = 0f;
+                    agentStuckTimer = 0f;
+                    agentLastPos = agentWorldPos;
                     agentHealth = agentMaxHealth;
                     agentHitFlashTimer = 0f;
                     agentAlive = true;
@@ -611,14 +637,59 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             if (wandererAlive)
             {
-            // Pick a new random 8-way heading every few seconds; slide on walls like the player.
+            // Enemy movement scheme:
+            // - maintain preferred range to player
+            // - strafe/orbit when in band
+            // - back off if too close
+            // - if line-of-sight blocked, take tile path steps toward player
+            // - add low-frequency drift and steering smoothing to avoid jittery micro-corrections
+            wandererRepathCooldown = MathF.Max(0f, wandererRepathCooldown - dt);
             wandererTurnTimer -= dt;
             if (wandererTurnTimer <= 0f)
             {
-                float ang = Random.Shared.Next(0, 8) * (MathF.PI / 4f);
-                wandererWanderDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
-                wandererTurnTimer = wandererTurnMin + Random.Shared.NextSingle() * (wandererTurnMax - wandererTurnMin);
+                float ang = Random.Shared.NextSingle() * MathF.Tau;
+                wandererDriftDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
+                wandererTurnTimer = 0.9f + Random.Shared.NextSingle() * 1.2f;
             }
+
+            Vector2 toPlayerMove = playerWorldPos - wandererWorldPos;
+            float distSqMove = toPlayerMove.LengthSquared();
+            float distMove = distSqMove > 1e-4f ? MathF.Sqrt(distSqMove) : 0f;
+            Vector2 toPlayerNMove = distMove > 1e-4f ? toPlayerMove / distMove : new Vector2(1f, 0f);
+
+            const float preferRange = 210f;
+            const float rangeBand = 40f;
+            Vector2 strafe = new Vector2(-toPlayerNMove.Y, toPlayerNMove.X);
+            if (((frameIndex + 3) & 1) == 0)
+            {
+                strafe = -strafe;
+            }
+
+            bool los = _gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf);
+            Vector2 npcMoveDir;
+            if (!los && distMove > 90f)
+            {
+                // Use a path step toward the player when blocked.
+                Vector2 step = npcPathfinder.NextStepWorld(wandererWorldPos, playerWorldPos);
+                Vector2 toStep = step - wandererWorldPos;
+                npcMoveDir = toStep.LengthSquared() > 1e-4f ? Vector2.Normalize(toStep) : toPlayerNMove;
+            }
+            else if (distMove > preferRange + rangeBand)
+            {
+                npcMoveDir = toPlayerNMove;
+            }
+            else if (distMove < preferRange - rangeBand)
+            {
+                npcMoveDir = -toPlayerNMove;
+            }
+            else
+            {
+                npcMoveDir = Vector2.Normalize(strafe * 0.85f + toPlayerNMove * 0.15f);
+            }
+
+            // Drift + smoothing.
+            Vector2 rawDir = Vector2.Normalize(npcMoveDir * 1.0f + wandererDriftDir * 0.35f);
+            wandererWanderDir = Vector2.Lerp(wandererWanderDir, rawDir, 1f - MathF.Exp(-6f * dt));
 
             Vector2 wanderDesiredVel = wandererWanderDir * wandererSpeed;
             wandererVel = _gameplay.Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
@@ -631,10 +702,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
             {
                 wandererWorldPos.X -= npcDelta.X;
                 wandererVel.X = 0f;
-                if (wanderMapBlockX)
-                {
-                    wandererTurnTimer = 0f;
-                }
             }
 
             wandererWorldPos.Y += npcDelta.Y;
@@ -644,10 +711,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
             {
                 wandererWorldPos.Y -= npcDelta.Y;
                 wandererVel.Y = 0f;
-                if (wanderMapBlockY)
-                {
-                    wandererTurnTimer = 0f;
-                }
             }
 
             wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
@@ -665,7 +728,30 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 playerHitHalfH,
                 _gameplay);
 
-            Vector2 wFace = wandererVel.LengthSquared() > 4f ? Vector2.Normalize(wandererVel) : wandererWanderDir;
+            float wMovedSq = Vector2.DistanceSquared(wandererWorldPos, wandererLastPos);
+            if (wMovedSq < 0.75f * 0.75f)
+            {
+                wandererStuckTimer += dt;
+            }
+            else
+            {
+                wandererStuckTimer = 0f;
+                wandererLastPos = wandererWorldPos;
+            }
+
+            // Keep the old path list unused for now (movement is continuous + occasional NextStepWorld). Clear if stuck.
+            if ((wanderMapBlockX || wanderMapBlockY) && wandererStuckTimer > 0.35f)
+            {
+                // no persistent path list anymore; allow NextStep to adapt naturally
+            }
+
+            // Stabilize facing so we don't flip rows from tiny nav steering changes while mostly stopped.
+            if (wandererVel.LengthSquared() > 10f * 10f)
+            {
+                wandererFaceDir = Vector2.Normalize(wandererVel);
+            }
+
+            Vector2 wFace = wandererFaceDir;
             if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
             {
                 wandererRow = wFace.X < 0f ? 1 : 2;
@@ -697,6 +783,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     float dist = MathF.Sqrt(distSq);
                     Vector2 nd = toPlayer / dist;
+                    // Face the shot direction so idle firing doesn't spin from nav replans.
+                    wandererFaceDir = nd;
                     bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false, 0f, ""));
                     wandererShootCooldown = wandererShootIntervalMin
                         + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
@@ -720,13 +808,51 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
             if (agentAlive)
             {
+                agentRepathCooldown = MathF.Max(0f, agentRepathCooldown - dt);
                 agentTurnTimer -= dt;
                 if (agentTurnTimer <= 0f)
                 {
-                    float ang = Random.Shared.Next(0, 8) * (MathF.PI / 4f);
-                    agentWanderDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
-                    agentTurnTimer = wandererTurnMin + Random.Shared.NextSingle() * (wandererTurnMax - wandererTurnMin);
+                    float ang = Random.Shared.NextSingle() * MathF.Tau;
+                    agentDriftDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
+                    agentTurnTimer = 0.85f + Random.Shared.NextSingle() * 1.25f;
                 }
+
+                Vector2 toPlayerMoveA = playerWorldPos - agentWorldPos;
+                float distSqMoveA = toPlayerMoveA.LengthSquared();
+                float distMoveA = distSqMoveA > 1e-4f ? MathF.Sqrt(distSqMoveA) : 0f;
+                Vector2 toPlayerNMoveA = distMoveA > 1e-4f ? toPlayerMoveA / distMoveA : new Vector2(-1f, 0f);
+
+                const float preferRangeA = 235f;
+                const float rangeBandA = 45f;
+                Vector2 strafeA = new Vector2(-toPlayerNMoveA.Y, toPlayerNMoveA.X);
+                if (((frameIndex + 7) & 1) == 0)
+                {
+                    strafeA = -strafeA;
+                }
+
+                bool losA = _gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf);
+                Vector2 moveDirA;
+                if (!losA && distMoveA > 90f)
+                {
+                    Vector2 stepA = npcPathfinder.NextStepWorld(agentWorldPos, playerWorldPos);
+                    Vector2 toStepA = stepA - agentWorldPos;
+                    moveDirA = toStepA.LengthSquared() > 1e-4f ? Vector2.Normalize(toStepA) : toPlayerNMoveA;
+                }
+                else if (distMoveA > preferRangeA + rangeBandA)
+                {
+                    moveDirA = toPlayerNMoveA;
+                }
+                else if (distMoveA < preferRangeA - rangeBandA)
+                {
+                    moveDirA = -toPlayerNMoveA;
+                }
+                else
+                {
+                    moveDirA = Vector2.Normalize(strafeA * 0.85f + toPlayerNMoveA * 0.15f);
+                }
+
+                Vector2 rawDirA = Vector2.Normalize(moveDirA * 1.0f + agentDriftDir * 0.33f);
+                agentWanderDir = Vector2.Lerp(agentWanderDir, rawDirA, 1f - MathF.Exp(-6f * dt));
 
                 Vector2 agentDesiredVel = agentWanderDir * wandererSpeed;
                 agentVel = _gameplay.Approach(agentVel, agentDesiredVel, wandererAccel * dt);
@@ -739,10 +865,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     agentWorldPos.X -= agentDelta.X;
                     agentVel.X = 0f;
-                    if (agentMapBlockX)
-                    {
-                        agentTurnTimer = 0f;
-                    }
                 }
 
                 agentWorldPos.Y += agentDelta.Y;
@@ -752,10 +874,6 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 {
                     agentWorldPos.Y -= agentDelta.Y;
                     agentVel.Y = 0f;
-                    if (agentMapBlockY)
-                    {
-                        agentTurnTimer = 0f;
-                    }
                 }
 
                 agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
@@ -773,7 +891,28 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     playerHitHalfH,
                     _gameplay);
 
-                Vector2 aFace = agentVel.LengthSquared() > 4f ? Vector2.Normalize(agentVel) : agentWanderDir;
+                float aMovedSq = Vector2.DistanceSquared(agentWorldPos, agentLastPos);
+                if (aMovedSq < 0.75f * 0.75f)
+                {
+                    agentStuckTimer += dt;
+                }
+                else
+                {
+                    agentStuckTimer = 0f;
+                    agentLastPos = agentWorldPos;
+                }
+
+                if ((agentMapBlockX || agentMapBlockY) && agentStuckTimer > 0.35f)
+                {
+                    // no persistent path list anymore; allow NextStep to adapt naturally
+                }
+
+                if (agentVel.LengthSquared() > 10f * 10f)
+                {
+                    agentFaceDir = Vector2.Normalize(agentVel);
+                }
+
+                Vector2 aFace = agentFaceDir;
                 if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
                 {
                     agentRow = aFace.X < 0f ? 1 : 2;
@@ -805,6 +944,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     {
                         float distA = MathF.Sqrt(distSqA);
                         Vector2 ndA = toPlayerA / distA;
+                        agentFaceDir = ndA;
                         bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false, 0f, ""));
                         agentShootCooldown = wandererShootIntervalMin
                             + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
