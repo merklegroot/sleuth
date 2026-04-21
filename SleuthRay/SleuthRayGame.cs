@@ -85,7 +85,12 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         Texture2D wandererTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_4_frame16x20.png");
         Texture2D agentTexture = RaylibTextures.LoadTexturePixel("assets/characters/character_9_frame16x20.png");
         Texture2D gunTexture = RaylibTextures.LoadTexturePixel("assets/weapons/1Revolver01.png");
-        Texture2D catTexture = RaylibTextures.LoadTexturePixel("assets/cats/cat.png");
+        Texture2D[] catTextures =
+        [
+            RaylibTextures.LoadTexturePixel("assets/cats/cat-a.png"),
+            RaylibTextures.LoadTexturePixel("assets/cats/cat-b.png"),
+            RaylibTextures.LoadTexturePixel("assets/cats/cat-c.png"),
+        ];
 
         // Raylib PlaySound restarts that buffer from the start; one clip cannot overlap itself.
         var gunshotVoices = new Sound[_gunshotAudio.VoiceCount];
@@ -169,7 +174,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         // Along last aim direction: offset by ~half scaled gun width so the pivot sits past the torso, not inside it.
         const float gunPivotAlongAimExtraPx = 14f;
         const float gunFlashDuration = 0.22f;
-        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name)>(48);
+        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name, int CatVariant)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
         const int maxCatsInInventory = 5;
@@ -718,13 +723,14 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Vector2 vel = dir * bulletSpeed;
-                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, _catNamePicker.Pick()));
+                int catVariant = Random.Shared.Next(0, catTextures.Length);
+                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, _catNamePicker.Pick(), catVariant));
                 catsInInventory--;
             }
 
             for (int i = bullets.Count - 1; i >= 0; i--)
             {
-                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, string bulletName) = bullets[i];
+                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, string bulletName, int bulletCatVariant) = bullets[i];
                 hitCooldown = MathF.Max(0f, hitCooldown - dt);
                 Vector2 newPos = pos + vel * dt;
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
@@ -737,7 +743,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
                         Vector2 spawnPos = _gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
-                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName, catMaxHealth));
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName, catMaxHealth, bulletCatVariant));
                     }
 
                     bullets.RemoveAt(i);
@@ -792,7 +798,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             enemies[hitEnemyIndex] = e;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
                         continue;
                     }
 
@@ -828,11 +834,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             wanderingCats[hitCatIndex] = hitCat;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
                     }
                     else
                     {
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
                     }
                 }
                 else if (!fromPlayer)
@@ -869,7 +875,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             wanderingCats[hitCatIndex] = hitCat;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
                     }
                     else if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                     {
@@ -891,7 +897,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     }
                     else
                     {
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
                     }
                 }
             }
@@ -1003,6 +1009,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             for (int ci = 0; ci < wanderingCats.Count; ci++)
             {
                 WanderingCat wc = wanderingCats[ci];
+                Texture2D catTexture = catTextures[Math.Clamp(wc.SpriteVariant, 0, catTextures.Length - 1)];
                 int catStripFrameCount = wc.IsWalking ? catWalkFrameCount : catIdleFrameCount;
                 int catFrameSafe = wc.FrameIndex % catStripFrameCount;
                 var catSrc = new Rectangle(catFrameSafe * catFrameSize, wc.DrawRow * catFrameSize, catFrameSize, catFrameSize);
@@ -1183,10 +1190,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = 0; i < bullets.Count; i++)
             {
-                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _, string bName) = bullets[i];
+                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _, string bName, int bCatVariant) = bullets[i];
                 Vector2 screen = cameraOffsetSmoothed + bPos;
                 if (bFromPlayer)
                 {
+                    Texture2D catBulletTexture = catTextures[Math.Clamp(bCatVariant, 0, catTextures.Length - 1)];
                     // Same as the gun: mirror in the left half-plane, atan2 on reflected X so diagonals stay sane and the sprite stays upright.
                     bool mirrorCatBullet = bVel.X < 0f;
                     float ax = mirrorCatBullet ? -bVel.X : bVel.X;
@@ -1202,7 +1210,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     var catBulletDest = new Rectangle(screen.X, screen.Y, cbW, cbH);
                     var catBulletOrigin = new Vector2(cbW * 0.5f, cbH * 0.5f);
                     var catBulletBounds = new Rectangle(screen.X - cbW * 0.5f, screen.Y - cbH * 0.5f, cbW, cbH);
-                    Raylib.DrawTexturePro(catTexture, catBulletSrc, catBulletDest, catBulletOrigin, catRotDeg, Color.WHITE);
+                    Raylib.DrawTexturePro(catBulletTexture, catBulletSrc, catBulletDest, catBulletOrigin, catRotDeg, Color.WHITE);
                     Raylib.DrawRectangleLinesEx(catBulletBounds, spriteBoundsThick, spriteBoundsCol);
 
                     if (bName.Length > 0)
@@ -1440,7 +1448,10 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         Raylib.CloseAudioDevice();
 
         Raylib.UnloadTexture(gunTexture);
-        Raylib.UnloadTexture(catTexture);
+        for (int i = 0; i < catTextures.Length; i++)
+        {
+            Raylib.UnloadTexture(catTextures[i]);
+        }
         Raylib.UnloadTexture(wandererTexture);
         Raylib.UnloadTexture(agentTexture);
         Raylib.UnloadTexture(characterTexture);

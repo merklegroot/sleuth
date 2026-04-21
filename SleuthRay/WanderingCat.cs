@@ -36,6 +36,7 @@ internal struct WanderingCat
 {
     public Vector2 WorldPos;
     public Vector2 HomePos;
+    public int SpriteVariant;
     public string Name;
     public string DebugAction;
     public bool IsWalking;
@@ -59,13 +60,14 @@ internal struct WanderingCat
     public int NavGoalTx;
     public int NavGoalTy;
 
-    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth)
+    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth, int? spriteVariant = null)
     {
         int mh = Math.Max(1, maxHealth);
         return new()
         {
             WorldPos = worldPos,
             HomePos = worldPos,
+            SpriteVariant = spriteVariant ?? Random.Shared.Next(0, 3),
             Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
             DebugAction = "spawn",
             IsWalking = false,
