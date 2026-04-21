@@ -2,6 +2,8 @@
 
 A shooter game where you fight bad guys by launching cats at them.
 
+![Screenshot](./screenshots/sleuthray.png)
+
 ## Gameplay
 
 ### Wandering cats

@@ -51,6 +51,17 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
     public void Run()
     {
+        string[] cmdArgs = Environment.GetCommandLineArgs();
+        bool screenshotMode = cmdArgs.Any(a => string.Equals(a, "--screenshot", StringComparison.OrdinalIgnoreCase));
+        string? screenshotPathArg = cmdArgs.FirstOrDefault(a => a.StartsWith("--screenshot-path=", StringComparison.OrdinalIgnoreCase));
+        string? screenshotPath = screenshotPathArg is null ? null : screenshotPathArg["--screenshot-path=".Length..];
+        if (screenshotMode && string.IsNullOrWhiteSpace(screenshotPath))
+        {
+            // TakeScreenshot behaves best with a path relative to the current working directory.
+            // Default: write to repo-level screenshots folder when launched from `SleuthRay/`.
+            screenshotPath = Path.Combine("..", "screenshots", "sleuthray.png");
+        }
+
         int screenWidth = _options.ScreenWidth;
         int screenHeight = _options.ScreenHeight;
 
@@ -1375,6 +1386,16 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             }
 
             Raylib.EndDrawing();
+
+            if (screenshotMode && frameIndex == 3 && screenshotPath is not null)
+            {
+                string screenshotPathFull = Path.GetFullPath(screenshotPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(screenshotPathFull)!);
+                Image img = Raylib.LoadImageFromScreen();
+                Raylib.ExportImage(img, screenshotPathFull);
+                Raylib.UnloadImage(img);
+                break;
+            }
 
             bool escapeHeld = Raylib.IsKeyDown(KeyboardKey.KEY_ESCAPE);
             if (escapeHeld && !prevEscapeHeld)
