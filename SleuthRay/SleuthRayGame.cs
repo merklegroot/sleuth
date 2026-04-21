@@ -167,6 +167,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Vector2 wandererVel = Vector2.Zero;
         Vector2 wandererWanderDir = new Vector2(1f, 0f); // fallback facing when not moving
         Vector2 wandererFaceDir = new Vector2(1f, 0f);
+        string wandererDebug = "";
         float wandererTurnTimer = 0f; // drift refresh timer
         Vector2 wandererNavTarget = wandererWorldPos;
         float wandererRepathCooldown = 0f;
@@ -201,6 +202,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         Vector2 agentVel = Vector2.Zero;
         Vector2 agentWanderDir = new Vector2(-1f, 0f);
         Vector2 agentFaceDir = new Vector2(-1f, 0f);
+        string agentDebug = "";
         float agentTurnTimer = 0f;
         Vector2 agentNavTarget = agentWorldPos;
         float agentRepathCooldown = 0f;
@@ -669,6 +671,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Vector2 npcMoveDir;
             if (!los && distMove > 90f)
             {
+                wandererDebug = "path";
                 // Use a path step toward the player when blocked.
                 Vector2 step = npcPathfinder.NextStepWorld(wandererWorldPos, playerWorldPos);
                 Vector2 toStep = step - wandererWorldPos;
@@ -676,14 +679,17 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
             else if (distMove > preferRange + rangeBand)
             {
+                wandererDebug = "approach";
                 npcMoveDir = toPlayerNMove;
             }
             else if (distMove < preferRange - rangeBand)
             {
+                wandererDebug = "retreat";
                 npcMoveDir = -toPlayerNMove;
             }
             else
             {
+                wandererDebug = "strafe";
                 npcMoveDir = Vector2.Normalize(strafe * 0.85f + toPlayerNMove * 0.15f);
             }
 
@@ -834,20 +840,24 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Vector2 moveDirA;
                 if (!losA && distMoveA > 90f)
                 {
+                    agentDebug = "path";
                     Vector2 stepA = npcPathfinder.NextStepWorld(agentWorldPos, playerWorldPos);
                     Vector2 toStepA = stepA - agentWorldPos;
                     moveDirA = toStepA.LengthSquared() > 1e-4f ? Vector2.Normalize(toStepA) : toPlayerNMoveA;
                 }
                 else if (distMoveA > preferRangeA + rangeBandA)
                 {
+                    agentDebug = "approach";
                     moveDirA = toPlayerNMoveA;
                 }
                 else if (distMoveA < preferRangeA - rangeBandA)
                 {
+                    agentDebug = "retreat";
                     moveDirA = -toPlayerNMoveA;
                 }
                 else
                 {
+                    agentDebug = "strafe";
                     moveDirA = Vector2.Normalize(strafeA * 0.85f + toPlayerNMoveA * 0.15f);
                 }
 
@@ -1261,6 +1271,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                 Raylib.DrawRectangleLinesEx(barBg, 1f, HealthBarPalette.Outline);
 
+                if (wandererDebug.Length > 0)
+                {
+                    const int npcDbgFontPx = 14;
+                    int dbgW = Raylib.MeasureText(wandererDebug, npcDbgFontPx);
+                    int dbgX = (int)(wanderScreen.X - dbgW * 0.5f);
+                    int dbgY = (int)(barTop - 18f);
+                    var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
+                    var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
+                    Raylib.DrawText(wandererDebug, dbgX + 1, dbgY + 1, npcDbgFontPx, dbgShadow);
+                    Raylib.DrawText(wandererDebug, dbgX, dbgY, npcDbgFontPx, dbgFg);
+                }
+
                 if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
                 {
                     _speechBubbleUi.Draw(
@@ -1325,6 +1347,18 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
 
                 Raylib.DrawRectangleLinesEx(agentBarBg, 1f, HealthBarPalette.Outline);
+
+                if (agentDebug.Length > 0)
+                {
+                    const int npcDbgFontPx = 14;
+                    int dbgW = Raylib.MeasureText(agentDebug, npcDbgFontPx);
+                    int dbgX = (int)(agentScreen.X - dbgW * 0.5f);
+                    int dbgY = (int)(agentBarTop - 18f);
+                    var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
+                    var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
+                    Raylib.DrawText(agentDebug, dbgX + 1, dbgY + 1, npcDbgFontPx, dbgShadow);
+                    Raylib.DrawText(agentDebug, dbgX, dbgY, npcDbgFontPx, dbgFg);
+                }
             }
 
             for (int ci = 0; ci < wanderingCats.Count; ci++)
