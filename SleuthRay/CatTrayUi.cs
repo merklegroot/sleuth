@@ -98,28 +98,32 @@ internal sealed class CatTrayUi : ICatTrayUi
                     {
                         Vector2 dn = d / MathF.Sqrt(lenSq);
                         // Place arrow just left of the cat icon.
-                        float ax = sx + 2f;
+                        float ax = sx + 12f;
                         float ay = sy + slotH * 0.5f;
-                        float shaftLen = 16f;
-                        float headLen = 9f;
-                        var anchor = new Vector2(ax, ay);
+                        float shaftLen = 8f;
+                        float headLen = 4.5f;
+                        var center = new Vector2(ax, ay);
                         var arrowFill = new Color((byte)245, (byte)245, (byte)245, (byte)245);
                         var arrowInk = new Color((byte)20, (byte)20, (byte)20, (byte)220);
-                        var tip = anchor + dn * (shaftLen + headLen);
-                        var shaftEnd = anchor + dn * shaftLen;
-                        Raylib.DrawLineEx(anchor, shaftEnd, 2.8f, arrowFill);
-                        Raylib.DrawLineEx(anchor, shaftEnd, 1.2f, arrowInk);
+
+                        // Center the arrow around its rotation axis (the `center` point).
+                        var shaftStart = center - dn * (shaftLen * 0.5f);
+                        var shaftEnd = center + dn * (shaftLen * 0.5f);
+                        var tip = shaftEnd + dn * headLen;
+
+                        Raylib.DrawLineEx(shaftStart, shaftEnd, 1.8f, arrowFill);
+                        Raylib.DrawLineEx(shaftStart, shaftEnd, 0.8f, arrowInk);
 
                         // Arrow head as two wings (more recognizable than a filled triangle at this size).
-                        float wingBack = 10f;
-                        float wingOut = 7f;
+                        float wingBack = 5f;
+                        float wingOut = 3.5f;
                         var perp = new Vector2(-dn.Y, dn.X);
                         var w1 = tip - dn * wingBack + perp * wingOut;
                         var w2 = tip - dn * wingBack - perp * wingOut;
-                        Raylib.DrawLineEx(tip, w1, 2.6f, arrowFill);
-                        Raylib.DrawLineEx(tip, w2, 2.6f, arrowFill);
-                        Raylib.DrawLineEx(tip, w1, 1.1f, arrowInk);
-                        Raylib.DrawLineEx(tip, w2, 1.1f, arrowInk);
+                        Raylib.DrawLineEx(tip, w1, 1.7f, arrowFill);
+                        Raylib.DrawLineEx(tip, w2, 1.7f, arrowFill);
+                        Raylib.DrawLineEx(tip, w1, 0.75f, arrowInk);
+                        Raylib.DrawLineEx(tip, w2, 0.75f, arrowInk);
                     }
                 }
 
@@ -127,7 +131,8 @@ internal sealed class CatTrayUi : ICatTrayUi
                 const int idleRow = 12;
                 var src = new Rectangle(0f, idleRow * catFrameSize, catFrameSize, catFrameSize);
 
-                float iconLeft = sx + 8;
+                // Leave a small left gutter for the direction arrow.
+                float iconLeft = sx + 18;
                 float iconTop = sy + (slotH - iconPx) * 0.5f;
                 var dst = new Rectangle(iconLeft, iconTop, iconPx, iconPx);
                 Raylib.DrawTexturePro(tex, src, dst, Vector2.Zero, 0f, Color.WHITE);
