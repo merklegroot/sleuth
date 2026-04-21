@@ -52,7 +52,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
         int screenHeight = _options.ScreenHeight;
 
         const string hintLine1 = "Tab: status & inventory";
-        const string hintLine2 = "Esc: exit";
+        const string hintLine2 = "Cmd+Enter or F11: fullscreen";
+        const string hintLine3 = "Esc: exit";
 
         Raylib.InitWindow(screenWidth, screenHeight, _options.WindowTitle);
         Raylib.SetTargetFPS(60);
@@ -113,6 +114,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
         bool prevGraveHeld = false;
         bool prevTabHeld = false;
         bool prevEscapeHeld = false;
+        bool prevF11Held = false;
+        bool prevCmdEnterHeld = false;
         bool[] prevGamepadBackHeld = new bool[4];
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
         bool[] r2AnalogArmed = [true, true, true, true];
@@ -288,6 +291,22 @@ public sealed class SleuthRayGame : ISleuthRayGame
         {
             frameIndex++;
             Raylib.PollInputEvents();
+
+            screenWidth = Raylib.GetScreenWidth();
+            screenHeight = Raylib.GetScreenHeight();
+            playerScreenPos = new Vector2(screenWidth * 0.5f, screenHeight * 0.5f);
+
+            bool f11Held = Raylib.IsKeyDown(KeyboardKey.KEY_F11);
+            bool superHeld = Raylib.IsKeyDown(KeyboardKey.KEY_LEFT_SUPER)
+                || Raylib.IsKeyDown(KeyboardKey.KEY_RIGHT_SUPER);
+            bool enterHeld = Raylib.IsKeyDown(KeyboardKey.KEY_ENTER)
+                || Raylib.IsKeyDown(KeyboardKey.KEY_KP_ENTER);
+            bool cmdEnterHeld = superHeld && enterHeld;
+            if ((cmdEnterHeld && !prevCmdEnterHeld) || (f11Held && !prevF11Held))
+            {
+                Raylib.ToggleFullscreen();
+            }
+
             // Rising edges from IsKeyDown (held state survives multiple PollInputEvents per frame;
             // IsKeyPressed can be cleared before we run shooting / overlay / quit logic).
             bool graveHeld = Raylib.IsKeyDown(KeyboardKey.KEY_GRAVE);
@@ -1353,9 +1372,11 @@ public sealed class SleuthRayGame : ISleuthRayGame
             const int hintPad = 12;
             const int hintLineGap = 4;
             const int hintMargin = 14;
-            int hintW = Math.Max(Raylib.MeasureText(hintLine1, hintFont), Raylib.MeasureText(hintLine2, hintFont));
+            int hintW = Math.Max(
+                Raylib.MeasureText(hintLine1, hintFont),
+                Math.Max(Raylib.MeasureText(hintLine2, hintFont), Raylib.MeasureText(hintLine3, hintFont)));
             int hintBoxW = hintW + hintPad * 2;
-            int hintBoxH = hintFont * 2 + hintLineGap + hintPad * 2;
+            int hintBoxH = hintFont * 3 + hintLineGap * 2 + hintPad * 2;
             int hintBoxX = hintMargin;
             int hintBoxY = screenHeight - hintBoxH - hintMargin;
             var hintBg = new Rectangle(hintBoxX, hintBoxY, hintBoxW, hintBoxH);
@@ -1370,6 +1391,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
             hy += hintFont + hintLineGap;
             Raylib.DrawText(hintLine2, hx + 2, hy + 2, hintFont, hintShadow);
             Raylib.DrawText(hintLine2, hx, hy, hintFont, hintFg);
+            hy += hintFont + hintLineGap;
+            Raylib.DrawText(hintLine3, hx + 2, hy + 2, hintFont, hintShadow);
+            Raylib.DrawText(hintLine3, hx, hy, hintFont, hintFg);
 
             string ammoText = $"Cats: {catsInInventory}";
             int ammoFont = hintFont;
@@ -1439,6 +1463,8 @@ public sealed class SleuthRayGame : ISleuthRayGame
             prevGraveHeld = graveHeld;
             prevTabHeld = tabHeld;
             prevEscapeHeld = escapeHeld;
+            prevF11Held = f11Held;
+            prevCmdEnterHeld = cmdEnterHeld;
 
             for (int g = 0; g < 4; g++)
             {
