@@ -126,7 +126,9 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool prevEscapeHeld = false;
         bool prevF11Held = false;
         bool prevCmdEnterHeld = false;
+        bool prevIHeld = false;
         bool[] prevGamepadBackHeld = new bool[4];
+        bool playerInvincible = false;
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
         bool[] r2AnalogArmed = [true, true, true, true];
         bool[] prevRightTrigger1Held = new bool[4];
@@ -308,6 +310,12 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             if (graveHeld && !prevGraveHeld)
             {
                 showInputDebugOverlay = !showInputDebugOverlay;
+            }
+
+            bool iHeld = Raylib.IsKeyDown(KeyboardKey.KEY_I);
+            if (iHeld && !prevIHeld)
+            {
+                playerInvincible = !playerInvincible;
             }
 
             float dt = Raylib.GetFrameTime();
@@ -855,16 +863,19 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     else if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                     {
                         bullets.RemoveAt(i);
-                        playerHitFlashTimer = enemyHitFlashDuration;
-                        playerHealth--;
-                        if (playerHealth <= 0)
+                        if (!playerInvincible)
                         {
-                            playerWorldPos = playerSpawnWorldPos;
-                            playerVel = Vector2.Zero;
-                            playerHealth = playerMaxHealth;
-                            playerHitFlashTimer = 0f;
-                            bullets.Clear();
-                            break;
+                            playerHitFlashTimer = enemyHitFlashDuration;
+                            playerHealth--;
+                            if (playerHealth <= 0)
+                            {
+                                playerWorldPos = playerSpawnWorldPos;
+                                playerVel = Vector2.Zero;
+                                playerHealth = playerMaxHealth;
+                                playerHitFlashTimer = 0f;
+                                bullets.Clear();
+                                break;
+                            }
                         }
                     }
                     else
@@ -1268,6 +1279,25 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             Raylib.DrawText(ammoText, ammoTextX + 2, ammoTextY + 2, ammoFont, hintShadow);
             Raylib.DrawText(ammoText, ammoTextX, ammoTextY, ammoFont, hintFg);
 
+            if (playerInvincible)
+            {
+                const int invFont = 18;
+                const int invPad = 8;
+                const string invText = "INVINCIBLE (I)";
+                int invW = Raylib.MeasureText(invText, invFont);
+                int invBoxW = invW + invPad * 2;
+                int invBoxH = invFont + invPad * 2;
+                int invBoxX = ammoBoxX + ammoBoxW + 10;
+                int invBoxY = ammoBoxY;
+                var invBg = new Rectangle(invBoxX, invBoxY, invBoxW, invBoxH);
+                Raylib.DrawRectangleRec(invBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
+                Raylib.DrawRectangleLinesEx(invBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
+                int invTextX = invBoxX + invPad;
+                int invTextY = invBoxY + invPad;
+                Raylib.DrawText(invText, invTextX + 2, invTextY + 2, invFont, hintShadow);
+                Raylib.DrawText(invText, invTextX, invTextY, invFont, hintFg);
+            }
+
             if (showInputDebugOverlay)
             {
                 Raylib.PollInputEvents();
@@ -1322,6 +1352,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             prevEscapeHeld = escapeHeld;
             prevF11Held = f11Held;
             prevCmdEnterHeld = cmdEnterHeld;
+            prevIHeld = iHeld;
 
             for (int g = 0; g < 4; g++)
             {
