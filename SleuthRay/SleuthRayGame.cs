@@ -114,7 +114,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         // World-space half extents of the player collision box (centered on player world position).
         const float playerHitHalfW = 12f;
         const float playerHitHalfH = 26f;
-        const float moveSpeed = 200f; // world pixels (after scaling) per second
+        const float moveSpeed = 240f; // world pixels (after scaling) per second
         const float accel = 2200f; // higher = snappier starts/stops
         const float friction = 2000f; // higher = quicker slow-down when no input
         const float stickDeadZone = 0.2f;
@@ -140,6 +140,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         Vector2 cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
         bool prevHasInput = false;
         bool prevSpaceHeld = false;
+        bool prevShiftHeld = false;
         bool prevGraveHeld = false;
         bool prevTabHeld = false;
         bool prevEscapeHeld = false;
@@ -152,6 +153,15 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool[] r2AnalogArmed = [true, true, true, true];
         bool[] prevRightTrigger1Held = new bool[4];
         bool[] prevRightTrigger2Held = new bool[4];
+
+        // Slide / dash (shift): fixed duration, locked direction, short cooldown.
+        const float slideDurationSeconds = 0.44f;
+        const float slideCooldownSeconds = 0.65f;
+        const float slideSpeed = 520f;
+        float slideTimer = 0f;
+        float slideCooldownTimer = 0f;
+        Vector2 slideDir = new(0f, 1f);
+        var slideDust = new List<(Vector2 Pos, Vector2 Vel, float Age, float Lifetime, float Radius)>(192);
 
         const int frameWidth = 16;
         const int frameHeight = 20;
@@ -568,15 +578,91 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 moveScale = MathF.Min(1f, stickLen);
             }
 
-            // Accel towards desired velocity; when no input, apply friction.
-            Vector2 desiredVel = moveDir * moveSpeed * moveScale;
-            if (hasInput)
+            bool shiftHeld = Raylib.IsKeyDown(KeyboardKey.KEY_LEFT_SHIFT) || Raylib.IsKeyDown(KeyboardKey.KEY_RIGHT_SHIFT);
+            bool slidePressed = shiftHeld && !prevShiftHeld;
+
+            slideCooldownTimer = MathF.Max(0f, slideCooldownTimer - dt);
+            bool sliding = slideTimer > 0f;
+            if (sliding)
             {
-                playerVel = _gameplay.Approach(playerVel, desiredVel, accel * dt);
+                slideTimer = MathF.Max(0f, slideTimer - dt);
+                if (slideTimer <= 0f)
+                {
+                    slideCooldownTimer = slideCooldownSeconds;
+                }
+            }
+            else if (slidePressed && slideCooldownTimer <= 0f && !statsMenuOpen)
+            {
+                Vector2 dir = moveDir;
+                if (dir.LengthSquared() <= 1e-6f && playerVel.LengthSquared() > 1e-6f)
+                {
+                    dir = Vector2.Normalize(playerVel);
+                }
+
+                if (dir.LengthSquared() > 1e-6f)
+                {
+                    slideDir = Vector2.Normalize(dir);
+                    slideTimer = slideDurationSeconds;
+                    sliding = true;
+                }
+            }
+
+            // Movement
+            if (sliding)
+            {
+                // Fixed slide velocity; cannot steer until it ends.
+                playerVel = slideDir * slideSpeed;
+
+                // Dust puffs behind the player while sliding.
+                float emitChance = 22f * dt;
+                int emits = (int)emitChance;
+                if (Random.Shared.NextSingle() < emitChance - emits) emits++;
+                for (int k = 0; k < emits; k++)
+                {
+                    // Emit from the player's feet area, biased slightly behind the slide direction.
+                    Vector2 feet = playerWorldPos + new Vector2(0f, playerHitHalfH * 0.85f);
+                    Vector2 behind = feet - slideDir * (playerHitHalfW + 10f);
+                    float jitter = (Random.Shared.NextSingle() - 0.5f) * 14f;
+                    Vector2 perp = new(-slideDir.Y, slideDir.X);
+                    Vector2 spawn = behind + perp * jitter;
+                    Vector2 vel = (-slideDir * (55f + Random.Shared.NextSingle() * 65f))
+                        + perp * ((Random.Shared.NextSingle() - 0.5f) * 55f)
+                        + new Vector2(0f, 18f);
+                    float life = 0.35f + Random.Shared.NextSingle() * 0.25f;
+                    float rad = 2.8f + Random.Shared.NextSingle() * 3.8f;
+                    slideDust.Add((spawn, vel, 0f, life, rad));
+                }
             }
             else
             {
-                playerVel = _gameplay.Approach(playerVel, Vector2.Zero, friction * dt);
+                // Accel towards desired velocity; when no input, apply friction.
+                Vector2 desiredVel = moveDir * moveSpeed * moveScale;
+                if (hasInput)
+                {
+                    playerVel = _gameplay.Approach(playerVel, desiredVel, accel * dt);
+                }
+                else
+                {
+                    playerVel = _gameplay.Approach(playerVel, Vector2.Zero, friction * dt);
+                }
+            }
+
+            if (dt > 0f && slideDust.Count > 0)
+            {
+                for (int si = slideDust.Count - 1; si >= 0; si--)
+                {
+                    var p = slideDust[si];
+                    p.Age += dt;
+                    if (p.Age >= p.Lifetime)
+                    {
+                        slideDust.RemoveAt(si);
+                        continue;
+                    }
+
+                    p.Pos += p.Vel * dt;
+                    p.Vel *= MathF.Pow(0.08f, dt);
+                    slideDust[si] = p;
+                }
             }
 
             Vector2 moveDelta = playerVel * dt;
@@ -667,7 +753,13 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             const float minCoastAnimRate = 0.10f;
             const float idleSpeedThreshold = 1.5f;
 
-            if (hasInput)
+            bool slidingNow = slideTimer > 0f;
+            if (slidingNow)
+            {
+                // Freeze the player's walk cycle while sliding.
+                // (The body still moves due to slide velocity, but the legs should not "run".)
+            }
+            else if (hasInput)
             {
                 // Ensure a quick tap still produces at least one visible frame change.
                 if (!prevHasInput)
@@ -1089,6 +1181,17 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             // Draw map (16x16 tiles) behind UI/sprites.
             map.Draw(scale: mapScale, offset: cameraOffsetSmoothed);
 
+            // Slide dust (world-space, drawn under characters).
+            for (int i = 0; i < slideDust.Count; i++)
+            {
+                var p = slideDust[i];
+                float t = p.Lifetime <= 0.001f ? 1f : Math.Clamp(p.Age / p.Lifetime, 0f, 1f);
+                byte a = (byte)Math.Clamp(180f * (1f - t), 0f, 180f);
+                var col = new Color((byte)200, (byte)185, (byte)150, a);
+                Vector2 s = cameraOffsetSmoothed + p.Pos;
+                Raylib.DrawCircleV(s, p.Radius * (0.85f + 0.45f * t), col);
+            }
+
             const float spriteBoundsThick = 1.25f;
             var spriteBoundsCol = new Color((byte)110, (byte)255, (byte)170, (byte)255);
 
@@ -1267,8 +1370,38 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
-            Raylib.DrawRectangleLinesEx(dest, spriteBoundsThick, spriteBoundsCol);
+            if (slideTimer > 0f)
+            {
+                // Fake a crouch by removing a chunk from the midsection (draw top+bottom closer together).
+                const float removeFrac = 0.28f;
+                float srcRemove = frameHeight * removeFrac;
+                float srcTopH = MathF.Round(frameHeight * 0.46f);
+                float srcBottomH = MathF.Max(1f, frameHeight - srcTopH - srcRemove);
+                float srcBottomY = src.Y + frameHeight - srcBottomH;
+
+                float destRemove = destH * (srcRemove / frameHeight);
+                float destTopH = destH * (srcTopH / frameHeight);
+                float destBottomH = destH * (srcBottomH / frameHeight);
+
+                float topY = charY + destRemove * 0.5f;
+                float botY = (charY + destH - destBottomH) - destRemove * 0.5f;
+                var srcTop = new Rectangle(src.X, src.Y, src.Width, srcTopH);
+                var srcBot = new Rectangle(src.X, srcBottomY, src.Width, srcBottomH);
+                var dstTop = new Rectangle(charX, topY, destW, destTopH);
+                var dstBot = new Rectangle(charX, botY, destW, destBottomH);
+                Raylib.DrawTexturePro(characterTexture, srcTop, dstTop, Vector2.Zero, 0f, playerTint);
+                Raylib.DrawTexturePro(characterTexture, srcBot, dstBot, Vector2.Zero, 0f, playerTint);
+
+                float crouchTop = MathF.Min(dstTop.Y, dstBot.Y);
+                float crouchBot = MathF.Max(dstTop.Y + dstTop.Height, dstBot.Y + dstBot.Height);
+                var crouchBounds = new Rectangle(charX, crouchTop, destW, crouchBot - crouchTop);
+                Raylib.DrawRectangleLinesEx(crouchBounds, spriteBoundsThick, spriteBoundsCol);
+            }
+            else
+            {
+                Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
+                Raylib.DrawRectangleLinesEx(dest, spriteBoundsThick, spriteBoundsCol);
+            }
 
             if (playerInvincible)
             {
@@ -1628,6 +1761,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             prevHasInput = hasInput;
             prevSpaceHeld = spaceHeld;
+            prevShiftHeld = shiftHeld;
             prevGraveHeld = graveHeld;
             prevTabHeld = tabHeld;
             prevEscapeHeld = escapeHeld;
