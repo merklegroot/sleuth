@@ -177,7 +177,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         // Along last aim direction: offset by ~half scaled gun width so the pivot sits past the torso, not inside it.
         const float gunPivotAlongAimExtraPx = 14f;
         const float gunFlashDuration = 0.22f;
-        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, int Health, int MaxHealth)>(48);
+        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, float Health, int MaxHealth)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
         const int playerCatCount = 5;
@@ -385,8 +385,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             }
 
             // Inventory healing: cats heal gradually while held (not deployed / not in flight).
-            const float heldHealSecondsPerHp = 6.0f;
-            if (heldHealSecondsPerHp > 0f && dt > 0f)
+            const float heldHealHpPerSecond = 1f / 6f; // 1 HP every ~6 seconds
+            if (heldHealHpPerSecond > 0f && dt > 0f)
             {
                 for (int i = 0; i < playerCats.Length; i++)
                 {
@@ -395,18 +395,14 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                         continue;
                     }
 
-                    if (playerCats[i].Health >= playerCats[i].MaxHealth)
+                    float maxH = playerCats[i].MaxHealth;
+                    if (playerCats[i].Health >= maxH)
                     {
-                        playerCats[i].HeldHealTimer = 0f;
+                        playerCats[i].Health = maxH;
                         continue;
                     }
 
-                    playerCats[i].HeldHealTimer += dt;
-                    while (playerCats[i].HeldHealTimer >= heldHealSecondsPerHp && playerCats[i].Health < playerCats[i].MaxHealth)
-                    {
-                        playerCats[i].HeldHealTimer -= heldHealSecondsPerHp;
-                        playerCats[i].Health++;
-                    }
+                    playerCats[i].Health = MathF.Min(maxH, playerCats[i].Health + heldHealHpPerSecond * dt);
                 }
             }
 
@@ -819,7 +815,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = bullets.Count - 1; i >= 0; i--)
             {
-                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, int bulletCatId, int bulletCatVariant, int bulletHealth, int bulletMaxHealth) = bullets[i];
+                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, int bulletCatId, int bulletCatVariant, float bulletHealth, int bulletMaxHealth) = bullets[i];
                 hitCooldown = MathF.Max(0f, hitCooldown - dt);
                 Vector2 newPos = pos + vel * dt;
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
@@ -925,11 +921,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                         {
                             hitCooldown = 0.20f;
                             WanderingCat hitCat = wanderingCats[hitCatIndex];
-                            hitCat.Health = Math.Max(0, hitCat.Health - 1);
+                            hitCat.Health = MathF.Max(0f, hitCat.Health - 1f);
                             hitCat.HitFlashTimer = enemyHitFlashDuration;
-                            if (hitCat.Health <= 0)
+                            if (hitCat.Health <= 0f)
                             {
-                                hitCat.Health = 0;
+                                hitCat.Health = 0f;
                                 hitCat.Disabled = true;
                             }
 
@@ -966,11 +962,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                         {
                             hitCooldown = 0.20f;
                             WanderingCat hitCat = wanderingCats[hitCatIndex];
-                            hitCat.Health = Math.Max(0, hitCat.Health - 1);
+                            hitCat.Health = MathF.Max(0f, hitCat.Health - 1f);
                             hitCat.HitFlashTimer = enemyHitFlashDuration;
-                            if (hitCat.Health <= 0)
+                            if (hitCat.Health <= 0f)
                             {
-                                hitCat.Health = 0;
+                                hitCat.Health = 0f;
                                 hitCat.Disabled = true;
                             }
 

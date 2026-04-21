@@ -51,7 +51,7 @@ internal struct WanderingCat
     public float ReturnTargetTimer;
     public Vector2 ReturnTargetOffset;
     public float ReturnWeavePhase;
-    public int Health;
+    public float Health;
     public int MaxHealth;
     public float HitFlashTimer;
     /// <summary>At 0 health the cat stops moving on its own but stays in the world until picked up.</summary>
@@ -67,11 +67,11 @@ internal struct WanderingCat
         string name,
         int maxHealth,
         int? spriteVariant = null,
-        int? health = null,
+        float? health = null,
         int? playerCatId = null)
     {
         int mh = Math.Max(1, maxHealth);
-        int h = Math.Clamp(health ?? mh, 0, mh);
+        float h = Math.Clamp(health ?? mh, 0f, mh);
         return new()
         {
             WorldPos = worldPos,

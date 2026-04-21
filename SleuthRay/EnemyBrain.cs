@@ -27,7 +27,7 @@ internal interface IEnemyBrain
         float catHitHalfH,
         List<WanderingCat> cats,
         IReadOnlyList<Enemy> allEnemies,
-        List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, int Health, int MaxHealth)> bullets,
+        List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, float Health, int MaxHealth)> bullets,
         TilePathfinder pathfinder,
         IGameplay gameplay);
 }
@@ -218,7 +218,7 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
         float catHitHalfH,
         List<WanderingCat> cats,
         IReadOnlyList<Enemy> allEnemies,
-        List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, int Health, int MaxHealth)> bullets,
+        List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, int PlayerCatId, int CatVariant, float Health, int MaxHealth)> bullets,
         TilePathfinder pathfinder,
         IGameplay gameplay)
     {
@@ -493,7 +493,7 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
                 {
                     aimDir = Vector2.Normalize(aimDir);
                     e.FaceDir = aimDir;
-                    bullets.Add((e.WorldPos + aimDir * p.BulletSpawnPad, aimDir * p.BulletSpeed, false, 0f, -1, -1, 0, 0));
+                    bullets.Add((e.WorldPos + aimDir * p.BulletSpawnPad, aimDir * p.BulletSpeed, false, 0f, -1, -1, 0f, 0));
                     fired = true;
                 }
 

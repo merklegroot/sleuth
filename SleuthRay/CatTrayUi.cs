@@ -143,10 +143,12 @@ internal sealed class CatTrayUi : ICatTrayUi
                 Raylib.DrawText(displayName, tx + 1, ty + 1, linePx, shadow);
                 Raylib.DrawText(displayName, tx, ty, linePx, fg);
 
-                int hp = Math.Max(0, cat.Health);
-                int mh = Math.Max(1, cat.MaxHealth);
-                float hpFrac = Math.Clamp(hp / (float)mh, 0f, 1f);
-                string hpText = $"{hp}/{mh}";
+                float hp = MathF.Max(0f, cat.Health);
+                float mh = MathF.Max(1f, cat.MaxHealth);
+                float hpFrac = Math.Clamp(hp / mh, 0f, 1f);
+                int hpTextInt = (int)MathF.Floor(hp + 0.0001f);
+                int mhTextInt = (int)MathF.Floor(mh + 0.0001f);
+                string hpText = $"{hpTextInt}/{mhTextInt}";
                 int hpw = Raylib.MeasureText(hpText, linePx);
                 int hpx = sx + slotW - hpw - 10;
                 Raylib.DrawText(hpText, hpx + 1, ty + 1, linePx, shadow);

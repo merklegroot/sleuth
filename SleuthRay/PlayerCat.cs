@@ -11,7 +11,7 @@ internal struct PlayerCat
 {
     public int Id;
     public string Name;
-    public int Health;
+    public float Health;
     public int MaxHealth;
     public int SpriteVariant;
     public PlayerCatState State;
