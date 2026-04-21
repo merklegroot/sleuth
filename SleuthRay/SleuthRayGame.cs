@@ -158,6 +158,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         const float slideDurationSeconds = 0.44f;
         const float slideCooldownSeconds = 0.65f;
         const float slideSpeed = 520f;
+        const float slideSteerStrength = 0.55f; // lower than normal movement authority
         float slideTimer = 0f;
         float slideCooldownTimer = 0f;
         Vector2 slideDir = new(0f, 1f);
@@ -612,8 +613,35 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             // Movement
             if (sliding)
             {
-                // Fixed slide velocity; cannot steer until it ends.
-                playerVel = slideDir * slideSpeed;
+                // Slide keeps high momentum, but allows partial steering mid-slide.
+                Vector2 steerDir = Vector2.Zero;
+                float steerMag = 0f;
+                if (keyHeld)
+                {
+                    steerDir = moveDir;
+                    steerMag = 1f;
+                }
+                else if (stickHeld)
+                {
+                    steerDir = moveDir;
+                    steerMag = moveScale;
+                }
+
+                Vector2 desired = slideDir * slideSpeed;
+                if (steerMag > 0.001f && steerDir.LengthSquared() > 1e-6f)
+                {
+                    // Blend toward input direction, scaled by stick magnitude.
+                    float t = Math.Clamp(steerMag * slideSteerStrength * dt * 10f, 0f, 1f);
+                    Vector2 blended = Vector2.Normalize(Vector2.Lerp(slideDir, steerDir, t));
+                    slideDir = blended;
+                    desired = slideDir * slideSpeed;
+                }
+
+                playerVel = _gameplay.Approach(playerVel, desired, accel * 1.35f * dt);
+                if (playerVel.LengthSquared() > 1e-6f)
+                {
+                    slideDir = Vector2.Normalize(playerVel);
+                }
 
                 // Dust puffs behind the player while sliding.
                 float emitChance = 22f * dt;
