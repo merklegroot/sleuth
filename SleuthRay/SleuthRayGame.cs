@@ -1255,7 +1255,19 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            _catTrayUi.Draw(screenWidth, screenHeight, catInventory, wanderingCats, catTextures, catFrameSize);
+            var inFlightCats = new List<CatInventoryItem>(Math.Min(12, bullets.Count));
+            for (int i = 0; i < bullets.Count; i++)
+            {
+                (Vector2 _, Vector2 _, bool fromPlayer, float _, string name, int variant, int health, int maxHealth) = bullets[i];
+                if (!fromPlayer)
+                {
+                    continue;
+                }
+
+                inFlightCats.Add(new CatInventoryItem(name, health, maxHealth, variant));
+            }
+
+            _catTrayUi.Draw(screenWidth, screenHeight, catInventory, wanderingCats, inFlightCats, catTextures, catFrameSize);
 
             // Radar (top-right): player, enemies, cats in world-space.
             const float radarMargin = 14f;
@@ -1323,8 +1335,9 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 Math.Max(Raylib.MeasureText(hintLine2, hintFont), Raylib.MeasureText(hintLine3, hintFont)));
             int hintBoxW = hintW + hintPad * 2;
             int hintBoxH = hintFont * 3 + hintLineGap * 2 + hintPad * 2;
-            int hintBoxX = hintMargin;
-            int hintBoxY = screenHeight - hintBoxH - hintMargin;
+            // Top-right.
+            int hintBoxX = screenWidth - hintBoxW - hintMargin;
+            int hintBoxY = hintMargin;
             var hintBg = new Rectangle(hintBoxX, hintBoxY, hintBoxW, hintBoxH);
             Raylib.DrawRectangleRec(hintBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
             Raylib.DrawRectangleLinesEx(hintBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
@@ -1347,8 +1360,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             int ammoW = Raylib.MeasureText(ammoText, ammoFont);
             int ammoBoxW = ammoW + ammoPad * 2;
             int ammoBoxH = ammoFont + ammoPad * 2;
-            int ammoBoxX = hintMargin;
-            int ammoBoxY = hintBoxY - ammoBoxH - 10;
+            int ammoBoxX = hintBoxX + hintBoxW - ammoBoxW; // right-align with hint box
+            int ammoBoxY = hintBoxY + hintBoxH + 10;
             var ammoBg = new Rectangle(ammoBoxX, ammoBoxY, ammoBoxW, ammoBoxH);
             Raylib.DrawRectangleRec(ammoBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
             Raylib.DrawRectangleLinesEx(ammoBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));
@@ -1365,8 +1378,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 int invW = Raylib.MeasureText(invText, invFont);
                 int invBoxW = invW + invPad * 2;
                 int invBoxH = invFont + invPad * 2;
-                int invBoxX = ammoBoxX + ammoBoxW + 10;
-                int invBoxY = ammoBoxY;
+                int invBoxX = hintBoxX + hintBoxW - invBoxW; // right-align with hint box
+                int invBoxY = ammoBoxY + ammoBoxH + 8;
                 var invBg = new Rectangle(invBoxX, invBoxY, invBoxW, invBoxH);
                 Raylib.DrawRectangleRec(invBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
                 Raylib.DrawRectangleLinesEx(invBg, 2f, new Color((byte)55, (byte)95, (byte)140, (byte)255));

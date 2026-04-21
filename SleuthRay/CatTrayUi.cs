@@ -9,6 +9,7 @@ internal interface ICatTrayUi
         int screenH,
         IReadOnlyList<CatInventoryItem> inventoryCats,
         IReadOnlyList<WanderingCat> deployedCats,
+        IReadOnlyList<CatInventoryItem> inFlightCats,
         Texture2D[] catTextures,
         int catFrameSize);
 }
@@ -20,26 +21,34 @@ internal sealed class CatTrayUi : ICatTrayUi
         int screenH,
         IReadOnlyList<CatInventoryItem> inventoryCats,
         IReadOnlyList<WanderingCat> deployedCats,
+        IReadOnlyList<CatInventoryItem> inFlightCats,
         Texture2D[] catTextures,
         int catFrameSize)
     {
-        int totalCats = inventoryCats.Count + deployedCats.Count;
+        int totalCats = inventoryCats.Count + deployedCats.Count + inFlightCats.Count;
         if (totalCats == 0 || catTextures.Length == 0 || catFrameSize <= 0)
         {
             return;
         }
 
-        var cats = new List<(string Name, int Health, int MaxHealth, int SpriteVariant, bool Deployed)>(totalCats);
+        var cats = new List<(string Name, int Health, int MaxHealth, int SpriteVariant, int State)>(totalCats);
+        // State: 0=held, 1=deployed, 2=in-flight
         for (int i = 0; i < inventoryCats.Count; i++)
         {
             CatInventoryItem c = inventoryCats[i];
-            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, false));
+            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, 0));
         }
 
         for (int i = 0; i < deployedCats.Count; i++)
         {
             WanderingCat c = deployedCats[i];
-            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, true));
+            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, 1));
+        }
+
+        for (int i = 0; i < inFlightCats.Count; i++)
+        {
+            CatInventoryItem c = inFlightCats[i];
+            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, 2));
         }
 
         const int margin = 14;
@@ -71,8 +80,9 @@ internal sealed class CatTrayUi : ICatTrayUi
         Raylib.DrawRectangleRoundedLines(tray, 0.18f, 10, 2, new Color((byte)55, (byte)95, (byte)140, (byte)255));
 
         var slotBg = new Color((byte)28, (byte)36, (byte)52, (byte)235);
-        var slotOutline = new Color((byte)90, (byte)110, (byte)150, (byte)255);
+        var slotOutlineHeld = new Color((byte)90, (byte)110, (byte)150, (byte)255);
         var slotOutlineDeployed = new Color((byte)220, (byte)200, (byte)160, (byte)255);
+        var slotOutlineInFlight = new Color((byte)160, (byte)235, (byte)255, (byte)255);
         var fg = new Color((byte)235, (byte)242, (byte)255, (byte)255);
         var shadow = new Color((byte)0, (byte)0, (byte)0, (byte)200);
 
@@ -81,13 +91,19 @@ internal sealed class CatTrayUi : ICatTrayUi
         {
             for (int c = 0; c < maxSlotsPerRow && idx < shown; c++, idx++)
             {
-                (string name, int health, int maxHealth, int spriteVariant, bool deployed) = cats[idx];
+                (string name, int health, int maxHealth, int spriteVariant, int state) = cats[idx];
 
                 int sx = left + pad + c * (slotW + gap);
                 int sy = top + pad + r * (slotH + gap);
                 var slot = new Rectangle(sx, sy, slotW, slotH);
                 Raylib.DrawRectangleRounded(slot, 0.16f, 8, slotBg);
-                Raylib.DrawRectangleRoundedLines(slot, 0.16f, 8, 2, deployed ? slotOutlineDeployed : slotOutline);
+                Color outline = state switch
+                {
+                    1 => slotOutlineDeployed,
+                    2 => slotOutlineInFlight,
+                    _ => slotOutlineHeld
+                };
+                Raylib.DrawRectangleRoundedLines(slot, 0.16f, 8, 2, outline);
 
                 int variant = Math.Clamp(spriteVariant, 0, catTextures.Length - 1);
                 Texture2D tex = catTextures[variant];
