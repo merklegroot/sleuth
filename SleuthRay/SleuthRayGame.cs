@@ -22,6 +22,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
     readonly ISpeechBubbleUi _speechBubbleUi;
     readonly IInputReadbackOverlay _inputReadbackOverlay;
     readonly IPlayerStatsMenuUi _playerStatsMenuUi;
+    readonly ICatTrayUi _catTrayUi;
 
     public SleuthRayGame(
         IOptions<SleuthRayOptions> optionsAccessor,
@@ -34,7 +35,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         IGamepadMappings gamepadMappings,
         ISpeechBubbleUi speechBubbleUi,
         IInputReadbackOverlay inputReadbackOverlay,
-        IPlayerStatsMenuUi playerStatsMenuUi)
+        IPlayerStatsMenuUi playerStatsMenuUi,
+        ICatTrayUi catTrayUi)
     {
         _options = optionsAccessor.Value;
         _resourceReader = resourceReader;
@@ -47,6 +49,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         _speechBubbleUi = speechBubbleUi;
         _inputReadbackOverlay = inputReadbackOverlay;
         _playerStatsMenuUi = playerStatsMenuUi;
+        _catTrayUi = catTrayUi;
     }
 
     public void Run()
@@ -1234,6 +1237,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     Raylib.DrawRectangleLinesEx(enemyBulletBounds, spriteBoundsThick, spriteBoundsCol);
                 }
             }
+
+            _catTrayUi.Draw(screenWidth, screenHeight, wanderingCats, catTextures, catFrameSize);
 
             // Radar (top-right): player, enemies, cats in world-space.
             const float radarMargin = 14f;

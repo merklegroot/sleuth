@@ -21,6 +21,7 @@ public sealed class SleuthRayGameRegistrar
             .AddSingleton<ISpeechBubbleUi, SpeechBubbleUi>()
             .AddSingleton<IInputReadbackOverlay, InputReadbackOverlay>()
             .AddSingleton<IPlayerStatsMenuUi, PlayerStatsMenuUi>()
+            .AddSingleton<ICatTrayUi, CatTrayUi>()
             .AddSingleton<ISleuthRayGame, SleuthRayGame>();
     }
 }
