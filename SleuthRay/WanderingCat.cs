@@ -37,6 +37,7 @@ internal struct WanderingCat
     public Vector2 WorldPos;
     public Vector2 HomePos;
     public int SpriteVariant;
+    public int PlayerCatId;
     public string Name;
     public string DebugAction;
     public bool IsWalking;
@@ -66,7 +67,8 @@ internal struct WanderingCat
         string name,
         int maxHealth,
         int? spriteVariant = null,
-        int? health = null)
+        int? health = null,
+        int? playerCatId = null)
     {
         int mh = Math.Max(1, maxHealth);
         int h = Math.Clamp(health ?? mh, 0, mh);
@@ -75,6 +77,7 @@ internal struct WanderingCat
             WorldPos = worldPos,
             HomePos = worldPos,
             SpriteVariant = spriteVariant ?? Random.Shared.Next(0, 3),
+            PlayerCatId = playerCatId ?? -1,
             Name = string.IsNullOrWhiteSpace(name) ? "Cat" : name.Trim(),
             DebugAction = "spawn",
             IsWalking = false,
