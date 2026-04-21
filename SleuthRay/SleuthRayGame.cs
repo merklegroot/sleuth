@@ -326,8 +326,13 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             frameIndex++;
             Raylib.PollInputEvents();
 
-            screenWidth = Raylib.GetScreenWidth();
-            screenHeight = Raylib.GetScreenHeight();
+            int prevScreenWidth = screenWidth;
+            int prevScreenHeight = screenHeight;
+            bool windowResized = Raylib.IsWindowResized();
+
+            // Use render size (framebuffer) so UI anchors correctly on HiDPI / fullscreen transitions.
+            screenWidth = Raylib.GetRenderWidth();
+            screenHeight = Raylib.GetRenderHeight();
             playerScreenPos = new Vector2(screenWidth * 0.5f, screenHeight * 0.5f);
 
             bool f11Held = Raylib.IsKeyDown(KeyboardKey.KEY_F11);
@@ -339,6 +344,19 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             if ((cmdEnterHeld && !prevCmdEnterHeld) || (f11Held && !prevF11Held))
             {
                 Raylib.ToggleFullscreen();
+                windowResized = true;
+                Raylib.PollInputEvents();
+                // Fullscreen toggles can change size mid-frame; refresh immediately so UI anchors update now.
+                screenWidth = Raylib.GetRenderWidth();
+                screenHeight = Raylib.GetRenderHeight();
+                playerScreenPos = new Vector2(screenWidth * 0.5f, screenHeight * 0.5f);
+            }
+
+            // If the window size changed (resize / fullscreen), snap the camera offset so the world recenters immediately.
+            // Without this, the smoothed camera offset can preserve the old screen-center alignment.
+            if (windowResized || screenWidth != prevScreenWidth || screenHeight != prevScreenHeight)
+            {
+                cameraOffsetSmoothed = playerScreenPos - playerWorldPos;
             }
 
             // Rising edges from IsKeyDown (held state survives multiple PollInputEvents per frame;
@@ -1491,7 +1509,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             int hintBoxW = hintW + hintPad * 2;
             int hintBoxH = hintFont * 3 + hintLineGap * 2 + hintPad * 2;
             // Top-right.
-            int hintBoxX = screenWidth - hintBoxW - hintMargin;
+            int hintBoxX = Math.Max(hintMargin, screenWidth - hintBoxW - hintMargin);
             int hintBoxY = hintMargin;
             var hintBg = new Rectangle(hintBoxX, hintBoxY, hintBoxW, hintBoxH);
             Raylib.DrawRectangleRec(hintBg, new Color((byte)8, (byte)14, (byte)28, (byte)115));
