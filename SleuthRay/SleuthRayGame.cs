@@ -1071,6 +1071,43 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
             Raylib.DrawRectangleLinesEx(dest, spriteBoundsThick, spriteBoundsCol);
 
+            if (playerInvincible)
+            {
+                // Visible "aura": bright pulsing glow + thick multi-ring outline in screen-space.
+                float pulse01 = 0.5f + 0.5f * MathF.Sin(frameIndex * 0.16f);
+                float rBase = MathF.Max(destW, destH) * 0.78f;
+                float rGlow = rBase + 10f + pulse01 * 10f;
+                float r1 = rBase + pulse01 * 8f;
+                float r2 = r1 + 9f;
+                float r3 = r2 + 10f;
+
+                byte glowA = (byte)Math.Clamp(40 + pulse01 * 75f, 0f, 255f);
+                byte a1 = (byte)Math.Clamp(140 + pulse01 * 110f, 0f, 255f);
+                byte a2 = (byte)Math.Clamp(90 + pulse01 * 95f, 0f, 255f);
+                byte a3 = (byte)Math.Clamp(45 + pulse01 * 75f, 0f, 255f);
+
+                // Soft fill glow (behind rings).
+                var glowInner = new Color((byte)150, (byte)235, (byte)255, glowA);
+                var glowOuter = new Color((byte)60, (byte)170, (byte)255, (byte)0);
+                Raylib.DrawCircleGradient((int)playerScreenPos.X, (int)playerScreenPos.Y, rGlow, glowInner, glowOuter);
+
+                // Thick-ish rings by stacking nearby circle outlines.
+                var col1 = new Color((byte)175, (byte)245, (byte)255, a1);
+                var col2 = new Color((byte)120, (byte)210, (byte)255, a2);
+                var col3 = new Color((byte)70, (byte)175, (byte)255, a3);
+                int px = (int)playerScreenPos.X;
+                int py = (int)playerScreenPos.Y;
+                for (int t = -1; t <= 1; t++)
+                {
+                    Raylib.DrawCircleLines(px, py, r1 + t, col1);
+                }
+                for (int t = -1; t <= 1; t++)
+                {
+                    Raylib.DrawCircleLines(px, py, r2 + t, col2);
+                }
+                Raylib.DrawCircleLines(px, py, r3, col3);
+            }
+
             float pBarW = destW - enemyHealthBarPadX * 2f;
             float pBarLeft = playerScreenPos.X - pBarW * 0.5f;
             float pBarTop = charY - enemyHealthBarGapAboveSprite - enemyHealthBarHeight;
