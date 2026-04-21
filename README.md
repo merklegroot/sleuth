@@ -23,14 +23,12 @@ Enemies are no longer simple “walk-and-shoot” bots. Each enemy runs a lightw
 - **Patrol / Idle**: Wander with a little personality drift so they feel alive.
 - **Chase Player**: Close distance (or reposition) when line-of-sight is blocked or they’re out of their preferred range.
 - **Attack / Shoot**: Hold a preferred distance and **strafe/circle** while firing.
-- **Avoid Danger**: If a lot of cats are nearby or an incoming “cat bullet” is on a collision course, they **sidestep / back off** instead of eating the hit.
 - **Flee (low health)**: When hurt, some enemies disengage and try to survive long enough to re-enter the fight.
-- **Hunt Disabled Cats (optional behavior)**: Certain enemies will opportunistically go after **disabled cats** to deny pickups (but won’t tunnel if it’s suicidal).
 
 #### Awareness & fairness
 
 - **Line-of-sight gating**: Enemies check line-of-sight before committing to shots.
-- **Target selection**: Depending on pressure, enemies may shoot at the **player** or the most threatening nearby **healthy cat**.
+- **Target selection**: Enemies currently target the **player** only (they’re unconcerned about cats for now).
 - **Readable “smarts”**: Reactions include small delays, aim error, and burst pacing so you can outplay them.
 
 #### Shooting upgrades
@@ -48,7 +46,7 @@ Enemies are no longer simple “walk-and-shoot” bots. Each enemy runs a lightw
 
 - **Aggressive Chaser**: Plays mid-range, strafes hard, and fires frequent bursts. Great at pressuring you while cats are flying.
 - **Sniper**: Prefers long range, takes higher-confidence shots, and leads aim more than others. Use cover and break line-of-sight.
-- **Cat Hunter**: Opportunistically hunts **disabled cats** and likes shooting down nearby cats when they swarm.
+- **Cat Hunter**: Name only for now — currently behaves like a player-focused archetype and does **not** path/aim/shoot based on cats.
 
 #### Tuning / difficulty
 

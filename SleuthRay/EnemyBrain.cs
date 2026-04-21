@@ -244,6 +244,14 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
             return false;
         }
 
+        // Enemies are currently unconcerned about cats. If an enemy somehow lands in a cat-related state
+        // (e.g., from older saves or future experimentation), normalize it back to a player-driven state.
+        if (e.State is EnemyState.AvoidDanger or EnemyState.HuntDisabledCats)
+        {
+            e.State = EnemyState.ChasePlayer;
+            e.StateTime = 0f;
+        }
+
         // --- Sense world ---
         Vector2 toPlayer = playerWorldPos - e.WorldPos;
         float distPlayerSq = toPlayer.LengthSquared();
@@ -251,47 +259,6 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
         Vector2 toPlayerN = distPlayer > 1e-4f ? toPlayer / distPlayer : e.FaceDir.LengthSquared() > 1e-6f ? Vector2.Normalize(e.FaceDir) : new Vector2(1f, 0f);
 
         bool losToPlayer = gameplay.LineOfSightClear(map, e.WorldPos, playerWorldPos, mapScale, p.LoSProbeHalf);
-
-        int nearbyHealthyCats = 0;
-        int nearbyDisabledCats = 0;
-        int nearestDisabledCat = -1;
-        float nearestDisabledSq = float.PositiveInfinity;
-        int nearestThreatCat = -1;
-        float nearestThreatSq = float.PositiveInfinity;
-
-        float dangerRadiusSq = p.DangerCatRadius * p.DangerCatRadius;
-        float disabledHuntRadiusSq = p.DisabledCatHuntRadius * p.DisabledCatHuntRadius;
-
-        for (int i = 0; i < cats.Count; i++)
-        {
-            Vector2 d = cats[i].WorldPos - e.WorldPos;
-            float dsq = d.LengthSquared();
-            if (dsq <= dangerRadiusSq)
-            {
-                if (cats[i].Disabled)
-                {
-                    nearbyDisabledCats++;
-                }
-                else
-                {
-                    nearbyHealthyCats++;
-                    if (dsq < nearestThreatSq)
-                    {
-                        nearestThreatSq = dsq;
-                        nearestThreatCat = i;
-                    }
-                }
-            }
-
-            if (cats[i].Disabled && dsq <= disabledHuntRadiusSq && dsq < nearestDisabledSq)
-            {
-                nearestDisabledSq = dsq;
-                nearestDisabledCat = i;
-            }
-        }
-
-        bool incomingCatBullet = IsThreatenedByIncomingCatBullet(e.WorldPos, bullets, p, dt);
-        bool catClusterDanger = nearbyHealthyCats >= p.DangerCatCount;
 
         float hpFrac = e.MaxHealth > 0 ? e.Health / (float)e.MaxHealth : 0f;
         bool shouldFlee = hpFrac <= p.FleeStartHealthFrac;
@@ -304,12 +271,7 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
 
             EnemyState next = e.State;
 
-            // "Avoid danger" has the highest priority if cats are swarming or a cat projectile is incoming.
-            if ((incomingCatBullet || catClusterDanger) && distPlayer < p.EngageRange)
-            {
-                next = EnemyState.AvoidDanger;
-            }
-            else if (shouldFlee && distPlayer < p.EngageRange)
+            if (shouldFlee && distPlayer < p.EngageRange)
             {
                 next = EnemyState.Flee;
             }
@@ -319,19 +281,7 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
             }
             else
             {
-                // Opportunistic disabled cat hunting (only when not actively pressured).
-                bool canHuntDisabled = e.Archetype == EnemyArchetype.CatHunter
-                    || (e.Archetype == EnemyArchetype.AggressiveChaser && hpFrac > 0.6f);
-
-                if (canHuntDisabled && nearestDisabledCat >= 0 && distPlayer < p.DisengageRange)
-                {
-                    // Don't tunnel on disabled cats if the player is right there and visible.
-                    if (!(losToPlayer && distPlayer < p.PreferredRange * 0.85f))
-                    {
-                        next = EnemyState.HuntDisabledCats;
-                    }
-                }
-                else if (distPlayer <= p.EngageRange)
+                if (distPlayer <= p.EngageRange)
                 {
                     // Attack only if we have LOS and are inside shooting band.
                     bool inAttackRange = distPlayer >= p.ShootMinRange && distPlayer <= p.ShootMaxRange;
@@ -364,24 +314,9 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
             }
         }
 
-        // --- Pick target for aiming (player vs threatening cat) ---
+        // --- Pick target for aiming (player only; enemies ignore cats for now) ---
         Vector2 aimTargetWorld = playerWorldPos;
         Vector2 aimTargetVel = playerVel;
-
-        bool preferShootingCats = e.State is EnemyState.AvoidDanger
-            || (e.Archetype == EnemyArchetype.CatHunter && nearbyHealthyCats > 0);
-
-        if (preferShootingCats && nearestThreatCat >= 0)
-        {
-            Vector2 catPos = cats[nearestThreatCat].WorldPos;
-            bool losToCat = gameplay.LineOfSightClear(map, e.WorldPos, catPos, mapScale, p.LoSProbeHalf);
-            if (losToCat)
-            {
-                aimTargetWorld = catPos;
-                aimTargetVel = Vector2.Zero; // cats don't expose velocity; keep shots readable and fair
-                e.Debug = "target:cat";
-            }
-        }
 
         bool losToAimTarget = gameplay.LineOfSightClear(map, e.WorldPos, aimTargetWorld, mapScale, p.LoSProbeHalf);
 
@@ -419,31 +354,12 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
                 e.Debug = "atk:strafe";
             }
         }
-        else if (e.State == EnemyState.AvoidDanger)
-        {
-            // Sidestep + small retreat, amplified if a cat bullet is inbound.
-            float retreatW = incomingCatBullet ? 0.55f : 0.25f;
-            Vector2 dodge = strafe * p.DodgeStrength;
-            desiredDir = Vector2.Normalize(dodge + (-toPlayerN) * retreatW);
-            e.Debug = incomingCatBullet ? "avoid:bullet" : "avoid:cats";
-        }
         else if (e.State == EnemyState.Flee)
         {
             // Run away from the player; if boxed in, path toward a random reachable tile away-ish.
             desiredDir = -toPlayerN;
             e.Debug = "flee";
             usePathStep = !losToPlayer && distPlayer < p.DisengageRange;
-        }
-        else if (e.State == EnemyState.HuntDisabledCats && nearestDisabledCat >= 0)
-        {
-            Vector2 goal = cats[nearestDisabledCat].WorldPos;
-            Vector2 toGoal = goal - e.WorldPos;
-            float d = toGoal.Length();
-            Vector2 n = d > 1e-4f ? toGoal / d : toPlayerN;
-            bool losToGoal = gameplay.LineOfSightClear(map, e.WorldPos, goal, mapScale, p.LoSProbeHalf);
-            desiredDir = n;
-            usePathStep = !losToGoal && d > 70f;
-            e.Debug = "hunt:disabled";
         }
         else if (e.State == EnemyState.ChasePlayer)
         {
@@ -556,8 +472,7 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
         e.ShootCooldown -= dt;
         e.BurstShotTimer -= dt;
 
-        bool wantsToShoot = e.State == EnemyState.Attack
-            || (e.State == EnemyState.AvoidDanger && losToAimTarget);
+        bool wantsToShoot = e.State == EnemyState.Attack;
 
         float distAimSq = Vector2.DistanceSquared(e.WorldPos, aimTargetWorld);
         bool inShootBand = distAimSq >= p.ShootMinRange * p.ShootMinRange && distAimSq <= p.ShootMaxRange * p.ShootMaxRange;
@@ -639,46 +554,6 @@ internal sealed class EnemyBrain(IGameplay gameplay) : IEnemyBrain
         }
 
         return Vector2.Normalize(sum / count);
-    }
-
-    static bool IsThreatenedByIncomingCatBulletBullet(in (Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name) b, Vector2 enemyPos, in EnemyParams p, float lookahead)
-    {
-        if (!b.FromPlayer)
-        {
-            return false;
-        }
-
-        Vector2 v = b.Vel;
-        float vSq = v.LengthSquared();
-        if (vSq < 1e-3f)
-        {
-            return false;
-        }
-
-        // Approximate closest approach over [0, lookahead] for a moving point.
-        Vector2 rel = enemyPos - b.Pos;
-        float t = Vector2.Dot(rel, v) / vSq;
-        t = Math.Clamp(t, 0f, lookahead);
-        Vector2 closest = b.Pos + v * t;
-        float r = p.IncomingCatBulletRadius;
-        return Vector2.DistanceSquared(closest, enemyPos) <= r * r;
-    }
-
-    static bool IsThreatenedByIncomingCatBullet(Vector2 enemyPos, IReadOnlyList<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name)> bullets, in EnemyParams p, float dt)
-    {
-        float lookahead = MathF.Max(0.10f, p.IncomingCatBulletLookaheadSeconds);
-        // Clamp to a small multiple of dt so detection doesn't spike at low FPS.
-        lookahead = MathF.Min(lookahead, MathF.Max(0.25f, dt * 8f));
-
-        for (int i = 0; i < bullets.Count; i++)
-        {
-            if (IsThreatenedByIncomingCatBulletBullet(bullets[i], enemyPos, p, lookahead))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     static Vector2 ComputeAimDirWithLead(Vector2 shooter, Vector2 targetPos, Vector2 targetVel, float bulletSpeed, float leadStrength)
