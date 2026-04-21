@@ -384,6 +384,32 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 dt = 0f;
             }
 
+            // Inventory healing: cats heal gradually while held (not deployed / not in flight).
+            const float heldHealSecondsPerHp = 6.0f;
+            if (heldHealSecondsPerHp > 0f && dt > 0f)
+            {
+                for (int i = 0; i < playerCats.Length; i++)
+                {
+                    if (playerCats[i].State != PlayerCatState.Held)
+                    {
+                        continue;
+                    }
+
+                    if (playerCats[i].Health >= playerCats[i].MaxHealth)
+                    {
+                        playerCats[i].HeldHealTimer = 0f;
+                        continue;
+                    }
+
+                    playerCats[i].HeldHealTimer += dt;
+                    while (playerCats[i].HeldHealTimer >= heldHealSecondsPerHp && playerCats[i].Health < playerCats[i].MaxHealth)
+                    {
+                        playerCats[i].HeldHealTimer -= heldHealSecondsPerHp;
+                        playerCats[i].Health++;
+                    }
+                }
+            }
+
             playerHitFlashTimer = MathF.Max(0f, playerHitFlashTimer - dt);
             wandererSpeechTimer = MathF.Max(0f, wandererSpeechTimer - dt);
             if (enemies.Count > 0 && enemies[0].Alive)
@@ -516,6 +542,20 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 WanderingCat wc = wanderingCats[ci];
                 WanderingCat.Tick(ref wc, map, mapScale, dt, worldW, worldH, playerWorldPos, catWanderParams, catPathfinder);
                 wanderingCats[ci] = wc;
+            }
+
+            // Keep tray health in sync while cats are deployed.
+            for (int ci = 0; ci < wanderingCats.Count; ci++)
+            {
+                int id = wanderingCats[ci].PlayerCatId;
+                if (id < 0 || id >= playerCats.Length)
+                {
+                    continue;
+                }
+
+                playerCats[id].Health = wanderingCats[ci].Health;
+                playerCats[id].MaxHealth = wanderingCats[ci].MaxHealth;
+                playerCats[id].SpriteVariant = wanderingCats[ci].SpriteVariant;
             }
 
             for (int ci = wanderingCats.Count - 1; ci >= 0; ci--)

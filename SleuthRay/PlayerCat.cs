@@ -15,5 +15,6 @@ internal struct PlayerCat
     public int MaxHealth;
     public int SpriteVariant;
     public PlayerCatState State;
+    public float HeldHealTimer;
 }
 
