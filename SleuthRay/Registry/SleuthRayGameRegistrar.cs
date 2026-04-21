@@ -15,6 +15,7 @@ public sealed class SleuthRayGameRegistrar
             .AddSingleton<IWandererTalkRepo, WandererTalkRepo>()
             .AddSingleton<IWandererTalkPicker, WandererTalkPicker>()
             .AddSingleton<IGameplay, Gameplay>()
+            .AddSingleton<IEnemyBrain, EnemyBrain>()
             .AddSingleton<IGunshotAudio, GunshotAudio>()
             .AddSingleton<IGamepadMappings, GamepadMappings>()
             .AddSingleton<ISpeechBubbleUi, SpeechBubbleUi>()

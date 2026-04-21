@@ -9,13 +9,14 @@ public interface ISleuthRayGame
     void Run();
 }
 
-public sealed class SleuthRayGame : ISleuthRayGame
+internal sealed class SleuthRayGame : ISleuthRayGame
 {
     readonly SleuthRayOptions _options;
     readonly IEmbeddedResourceReader _resourceReader;
     readonly ICatNamePicker _catNamePicker;
     readonly IWandererTalkPicker _wandererTalkPicker;
     readonly IGameplay _gameplay;
+    readonly IEnemyBrain _enemyBrain;
     readonly IGunshotAudio _gunshotAudio;
     readonly IGamepadMappings _gamepadMappings;
     readonly ISpeechBubbleUi _speechBubbleUi;
@@ -28,6 +29,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         ICatNamePicker catNamePicker,
         IWandererTalkPicker wandererTalkPicker,
         IGameplay gameplay,
+        IEnemyBrain enemyBrain,
         IGunshotAudio gunshotAudio,
         IGamepadMappings gamepadMappings,
         ISpeechBubbleUi speechBubbleUi,
@@ -39,6 +41,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
         _catNamePicker = catNamePicker;
         _wandererTalkPicker = wandererTalkPicker;
         _gameplay = gameplay;
+        _enemyBrain = enemyBrain;
         _gunshotAudio = gunshotAudio;
         _gamepadMappings = gamepadMappings;
         _speechBubbleUi = speechBubbleUi;
@@ -162,65 +165,32 @@ public sealed class SleuthRayGame : ISleuthRayGame
         // Pathfinder grids (cached per map+hitbox); used for smarter NPC/cat navigation.
         var npcPathfinder = new TilePathfinder(map, mapScale, playerHitHalfW, playerHitHalfH);
 
-        // NPC shares player strip layout (16×20, 4 rows × 4 walk frames).
-        Vector2 wandererWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH);
-        Vector2 wandererVel = Vector2.Zero;
-        Vector2 wandererWanderDir = new Vector2(1f, 0f); // fallback facing when not moving
-        Vector2 wandererFaceDir = new Vector2(1f, 0f);
-        string wandererDebug = "";
-        float wandererTurnTimer = 0f; // drift refresh timer
-        Vector2 wandererNavTarget = wandererWorldPos;
-        float wandererRepathCooldown = 0f;
-        float wandererStuckTimer = 0f;
-        Vector2 wandererLastPos = wandererWorldPos;
-        int wandererCycleIndex = 0;
-        int wandererRow = 0;
-        float wandererAnimTimer = 0f;
-        const float wandererSpeed = 95f;
-        const float wandererAccel = 1600f;
-        const float wandererAnimFrameSeconds = 0.2f;
-        bool wandererAlive = true;
-        float wandererRespawnTimer = 0f;
-        const float wandererRespawnDelay = 2.8f;
-        const int wandererMaxHealth = 6;
-        int wandererHealth = wandererMaxHealth;
-        const float wandererHealthBarPadX = 4f;
-        const float wandererHealthBarHeight = 5f;
-        const float wandererHealthBarGapAboveSprite = 6f;
-        const float wandererHitFlashDuration = 0.35f;
-        const float wandererHitBlinkHz = 22f;
-        float wandererHitFlashTimer = 0f;
-        float wandererShootCooldown = 1.8f;
-        const float wandererBulletSpeed = 290f;
-        const float wandererShootIntervalMin = 1.5f;
-        const float wandererShootIntervalMax = 3.4f;
-        const float wandererShootRetryWhenBlind = 0.45f;
-        const float wandererShootMaxRange = 540f;
+        // Enemies share the same 16×20 strip layout as the player (4 rows × 4 walk frames).
+        const float enemyRespawnDelay = 2.8f;
+        const int enemyMaxHealth = 6;
+        const float enemyHealthBarPadX = 4f;
+        const float enemyHealthBarHeight = 5f;
+        const float enemyHealthBarGapAboveSprite = 6f;
+        const float enemyHitFlashDuration = 0.35f;
+        const float enemyHitBlinkHz = 22f;
 
-        // Second hostile NPC (character_9 sheet); same strip layout and combat as wanderer, no dialogue.
-        Vector2 agentWorldPos = _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH);
-        Vector2 agentVel = Vector2.Zero;
-        Vector2 agentWanderDir = new Vector2(-1f, 0f);
-        Vector2 agentFaceDir = new Vector2(-1f, 0f);
-        string agentDebug = "";
-        float agentTurnTimer = 0f;
-        Vector2 agentNavTarget = agentWorldPos;
-        float agentRepathCooldown = 0f;
-        float agentStuckTimer = 0f;
-        Vector2 agentLastPos = agentWorldPos;
-        int agentCycleIndex = 0;
-        int agentRow = 0;
-        float agentAnimTimer = 0f;
-        bool agentAlive = true;
-        float agentRespawnTimer = 0f;
-        const int agentMaxHealth = 6;
-        int agentHealth = agentMaxHealth;
-        float agentHitFlashTimer = 0f;
-        float agentShootCooldown = 2.2f + Random.Shared.NextSingle() * 1.4f;
-
-        // Movement "drift" so enemies don't micro-correct perfectly.
-        Vector2 wandererDriftDir = Vector2.Zero;
-        Vector2 agentDriftDir = Vector2.Zero;
+        // Spawn a small cast with different personalities.
+        var enemies = new List<Enemy>(8);
+        enemies.Add(_enemyBrain.Spawn(
+            EnemyArchetype.AggressiveChaser,
+            id: 0,
+            _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(96f, 48f), mapScale, playerHitHalfW, playerHitHalfH),
+            enemyMaxHealth));
+        enemies.Add(_enemyBrain.Spawn(
+            EnemyArchetype.Sniper,
+            id: 1,
+            _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(-108f, 72f), mapScale, playerHitHalfW, playerHitHalfH),
+            enemyMaxHealth));
+        enemies.Add(_enemyBrain.Spawn(
+            EnemyArchetype.CatHunter,
+            id: 2,
+            _gameplay.FindWandererSpawn(map, playerWorldPos + new Vector2(56f, -112f), mapScale, playerHitHalfW, playerHitHalfH),
+            enemyMaxHealth));
 
         // Cat: 64×64 frames; sheet rows are 1-based in art specs (idle = row 13 → index 12), 8 idle frames.
         const int catFrameSize = 64;
@@ -370,11 +340,9 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 dt = 0f;
             }
 
-            wandererHitFlashTimer = MathF.Max(0f, wandererHitFlashTimer - dt);
-            agentHitFlashTimer = MathF.Max(0f, agentHitFlashTimer - dt);
             playerHitFlashTimer = MathF.Max(0f, playerHitFlashTimer - dt);
             wandererSpeechTimer = MathF.Max(0f, wandererSpeechTimer - dt);
-            if (wandererAlive)
+            if (enemies.Count > 0 && enemies[0].Alive)
             {
                 if (wandererSpeechTimer <= 0f)
                 {
@@ -587,388 +555,66 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            // Wanderer NPC
-            if (!wandererAlive)
+            // Enemies (FSM + variants)
+            // Keep a copy for separation/awareness reads (so each tick sees a stable snapshot).
+            var enemiesSnapshot = enemies.ToArray();
+            for (int ei = 0; ei < enemies.Count; ei++)
             {
-                wandererRespawnTimer -= dt;
-                if (wandererRespawnTimer <= 0f)
+                Enemy e = enemies[ei];
+                if (!e.Alive)
                 {
-                    float ang = Random.Shared.NextSingle() * MathF.Tau;
-                    Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 140f;
-                    wandererWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
-                    wandererVel = Vector2.Zero;
-                    wandererWanderDir = new Vector2(1f, 0f);
-                    wandererFaceDir = new Vector2(1f, 0f);
-                    wandererTurnTimer = 0f;
-                    wandererNavTarget = wandererWorldPos;
-                    wandererRepathCooldown = 0f;
-                    wandererStuckTimer = 0f;
-                    wandererLastPos = wandererWorldPos;
-                    wandererHealth = wandererMaxHealth;
-                    wandererHitFlashTimer = 0f;
-                    wandererAlive = true;
-                    wandererShootCooldown = 1.2f + Random.Shared.NextSingle() * 1.6f;
-                    wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
-                    wandererSpeechTimer = wandererSpeechShowSeconds;
-                    wandererChatterCooldown = wandererSpeechShowSeconds + 8f + Random.Shared.NextSingle() * 10f;
-                }
-            }
-
-            if (!agentAlive)
-            {
-                agentRespawnTimer -= dt;
-                if (agentRespawnTimer <= 0f)
-                {
-                    float ang = Random.Shared.NextSingle() * MathF.Tau + 1.7f;
-                    Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * 155f;
-                    agentWorldPos = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
-                    agentVel = Vector2.Zero;
-                    agentWanderDir = new Vector2(-1f, 0f);
-                    agentFaceDir = new Vector2(-1f, 0f);
-                    agentTurnTimer = 0f;
-                    agentNavTarget = agentWorldPos;
-                    agentRepathCooldown = 0f;
-                    agentStuckTimer = 0f;
-                    agentLastPos = agentWorldPos;
-                    agentHealth = agentMaxHealth;
-                    agentHitFlashTimer = 0f;
-                    agentAlive = true;
-                    agentShootCooldown = 1.4f + Random.Shared.NextSingle() * 1.8f;
-                }
-            }
-
-            if (wandererAlive)
-            {
-            // Enemy movement scheme:
-            // - maintain preferred range to player
-            // - strafe/orbit when in band
-            // - back off if too close
-            // - if line-of-sight blocked, take tile path steps toward player
-            // - add low-frequency drift and steering smoothing to avoid jittery micro-corrections
-            wandererRepathCooldown = MathF.Max(0f, wandererRepathCooldown - dt);
-            wandererTurnTimer -= dt;
-            if (wandererTurnTimer <= 0f)
-            {
-                float ang = Random.Shared.NextSingle() * MathF.Tau;
-                wandererDriftDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
-                wandererTurnTimer = 0.9f + Random.Shared.NextSingle() * 1.2f;
-            }
-
-            Vector2 toPlayerMove = playerWorldPos - wandererWorldPos;
-            float distSqMove = toPlayerMove.LengthSquared();
-            float distMove = distSqMove > 1e-4f ? MathF.Sqrt(distSqMove) : 0f;
-            Vector2 toPlayerNMove = distMove > 1e-4f ? toPlayerMove / distMove : new Vector2(1f, 0f);
-
-            const float preferRange = 210f;
-            const float rangeBand = 40f;
-            Vector2 strafe = new Vector2(-toPlayerNMove.Y, toPlayerNMove.X);
-            if (((frameIndex + 3) & 1) == 0)
-            {
-                strafe = -strafe;
-            }
-
-            bool los = _gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf);
-            Vector2 npcMoveDir;
-            if (!los && distMove > 90f)
-            {
-                wandererDebug = "path";
-                // Use a path step toward the player when blocked.
-                Vector2 step = npcPathfinder.NextStepWorld(wandererWorldPos, playerWorldPos);
-                Vector2 toStep = step - wandererWorldPos;
-                npcMoveDir = toStep.LengthSquared() > 1e-4f ? Vector2.Normalize(toStep) : toPlayerNMove;
-            }
-            else if (distMove > preferRange + rangeBand)
-            {
-                wandererDebug = "approach";
-                npcMoveDir = toPlayerNMove;
-            }
-            else if (distMove < preferRange - rangeBand)
-            {
-                wandererDebug = "retreat";
-                npcMoveDir = -toPlayerNMove;
-            }
-            else
-            {
-                wandererDebug = "strafe";
-                npcMoveDir = Vector2.Normalize(strafe * 0.85f + toPlayerNMove * 0.15f);
-            }
-
-            // Drift + smoothing.
-            Vector2 rawDir = Vector2.Normalize(npcMoveDir * 1.0f + wandererDriftDir * 0.35f);
-            wandererWanderDir = Vector2.Lerp(wandererWanderDir, rawDir, 1f - MathF.Exp(-6f * dt));
-
-            Vector2 wanderDesiredVel = wandererWanderDir * wandererSpeed;
-            wandererVel = _gameplay.Approach(wandererVel, wanderDesiredVel, wandererAccel * dt);
-
-            Vector2 npcDelta = wandererVel * dt;
-            wandererWorldPos.X += npcDelta.X;
-            bool wanderMapBlockX = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockX = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
-            if (wanderMapBlockX || wanderCatBlockX)
-            {
-                wandererWorldPos.X -= npcDelta.X;
-                wandererVel.X = 0f;
-            }
-
-            wandererWorldPos.Y += npcDelta.Y;
-            bool wanderMapBlockY = map.OverlapsBlockingTile(wandererWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-            bool wanderCatBlockY = WanderingCat.NpcOverlapsAnyCat(wandererWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
-            if (wanderMapBlockY || wanderCatBlockY)
-            {
-                wandererWorldPos.Y -= npcDelta.Y;
-                wandererVel.Y = 0f;
-            }
-
-            wandererWorldPos.X = Math.Clamp(wandererWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
-            wandererWorldPos.Y = Math.Clamp(wandererWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-            WanderingCat.NpcPushOutOfOverlappingCats(
-                ref wandererWorldPos,
-                playerHitHalfW,
-                playerHitHalfH,
-                wanderingCats,
-                catHitHalfW,
-                catHitHalfH,
-                worldW,
-                worldH,
-                playerHitHalfW,
-                playerHitHalfH,
-                _gameplay);
-
-            float wMovedSq = Vector2.DistanceSquared(wandererWorldPos, wandererLastPos);
-            if (wMovedSq < 0.75f * 0.75f)
-            {
-                wandererStuckTimer += dt;
-            }
-            else
-            {
-                wandererStuckTimer = 0f;
-                wandererLastPos = wandererWorldPos;
-            }
-
-            // Keep the old path list unused for now (movement is continuous + occasional NextStepWorld). Clear if stuck.
-            if ((wanderMapBlockX || wanderMapBlockY) && wandererStuckTimer > 0.35f)
-            {
-                // no persistent path list anymore; allow NextStep to adapt naturally
-            }
-
-            // Stabilize facing so we don't flip rows from tiny nav steering changes while mostly stopped.
-            if (wandererVel.LengthSquared() > 10f * 10f)
-            {
-                wandererFaceDir = Vector2.Normalize(wandererVel);
-            }
-
-            Vector2 wFace = wandererFaceDir;
-            if (MathF.Abs(wFace.X) > MathF.Abs(wFace.Y))
-            {
-                wandererRow = wFace.X < 0f ? 1 : 2;
-            }
-            else
-            {
-                wandererRow = wFace.Y < 0f ? 3 : 0;
-            }
-
-            float wSpeed = wandererVel.Length();
-            if (wSpeed > 10f)
-            {
-                wandererAnimTimer += dt * MathF.Max(0.35f, wSpeed / wandererSpeed);
-                while (wandererAnimTimer >= wandererAnimFrameSeconds)
-                {
-                    wandererAnimTimer -= wandererAnimFrameSeconds;
-                    wandererCycleIndex = (wandererCycleIndex + 1) % frameCycle.Length;
-                }
-            }
-
-            wandererShootCooldown -= dt;
-            if (wandererShootCooldown <= 0f)
-            {
-                Vector2 toPlayer = playerWorldPos - wandererWorldPos;
-                float distSq = toPlayer.LengthSquared();
-                if (distSq > 40f * 40f
-                    && distSq <= wandererShootMaxRange * wandererShootMaxRange
-                    && _gameplay.LineOfSightClear(map, wandererWorldPos, playerWorldPos, mapScale, bulletHitHalf))
-                {
-                    float dist = MathF.Sqrt(distSq);
-                    Vector2 nd = toPlayer / dist;
-                    // Face the shot direction so idle firing doesn't spin from nav replans.
-                    wandererFaceDir = nd;
-                    bullets.Add((wandererWorldPos + nd * bulletSpawnPad, nd * wandererBulletSpeed, false, 0f, ""));
-                    wandererShootCooldown = wandererShootIntervalMin
-                        + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
-                    if (gunshotSoundReady)
+                    e.RespawnTimer -= dt;
+                    if (e.RespawnTimer <= 0f)
                     {
-                        Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                        gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
+                        float ang = Random.Shared.NextSingle() * MathF.Tau + ei * 0.75f;
+                        Vector2 hint = playerWorldPos + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * (140f + 12f * ei);
+                        Vector2 spawn = _gameplay.FindWandererSpawn(map, hint, mapScale, playerHitHalfW, playerHitHalfH);
+                        e = _enemyBrain.Spawn(e.Archetype, e.Id, spawn, enemyMaxHealth);
+                        if (e.Id == 0)
+                        {
+                            wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
+                            wandererSpeechTimer = wandererSpeechShowSeconds;
+                            wandererChatterCooldown = wandererSpeechShowSeconds + 8f + Random.Shared.NextSingle() * 10f;
+                        }
                     }
 
+                    enemies[ei] = e;
+                    continue;
+                }
+
+                bool fired = _enemyBrain.Tick(
+                    ref e,
+                    map,
+                    mapScale,
+                    dt,
+                    worldW,
+                    worldH,
+                    playerWorldPos,
+                    playerVel,
+                    playerHitHalfW,
+                    playerHitHalfH,
+                    catHitHalfW,
+                    catHitHalfH,
+                    wanderingCats,
+                    enemiesSnapshot,
+                    bullets,
+                    npcPathfinder,
+                    _gameplay);
+
+                if (fired && gunshotSoundReady)
+                {
+                    Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
+                }
+
+                if (fired && e.Id == 0)
+                {
                     wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Shoot);
                     wandererSpeechTimer = wandererSpeechShowSeconds;
                     wandererChatterCooldown = 8f + Random.Shared.NextSingle() * 10f;
                 }
-                else
-                {
-                    wandererShootCooldown = wandererShootRetryWhenBlind;
-                }
-            }
 
-            } // wandererAlive update block
-
-            if (agentAlive)
-            {
-                agentRepathCooldown = MathF.Max(0f, agentRepathCooldown - dt);
-                agentTurnTimer -= dt;
-                if (agentTurnTimer <= 0f)
-                {
-                    float ang = Random.Shared.NextSingle() * MathF.Tau;
-                    agentDriftDir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
-                    agentTurnTimer = 0.85f + Random.Shared.NextSingle() * 1.25f;
-                }
-
-                Vector2 toPlayerMoveA = playerWorldPos - agentWorldPos;
-                float distSqMoveA = toPlayerMoveA.LengthSquared();
-                float distMoveA = distSqMoveA > 1e-4f ? MathF.Sqrt(distSqMoveA) : 0f;
-                Vector2 toPlayerNMoveA = distMoveA > 1e-4f ? toPlayerMoveA / distMoveA : new Vector2(-1f, 0f);
-
-                const float preferRangeA = 235f;
-                const float rangeBandA = 45f;
-                Vector2 strafeA = new Vector2(-toPlayerNMoveA.Y, toPlayerNMoveA.X);
-                if (((frameIndex + 7) & 1) == 0)
-                {
-                    strafeA = -strafeA;
-                }
-
-                bool losA = _gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf);
-                Vector2 moveDirA;
-                if (!losA && distMoveA > 90f)
-                {
-                    agentDebug = "path";
-                    Vector2 stepA = npcPathfinder.NextStepWorld(agentWorldPos, playerWorldPos);
-                    Vector2 toStepA = stepA - agentWorldPos;
-                    moveDirA = toStepA.LengthSquared() > 1e-4f ? Vector2.Normalize(toStepA) : toPlayerNMoveA;
-                }
-                else if (distMoveA > preferRangeA + rangeBandA)
-                {
-                    agentDebug = "approach";
-                    moveDirA = toPlayerNMoveA;
-                }
-                else if (distMoveA < preferRangeA - rangeBandA)
-                {
-                    agentDebug = "retreat";
-                    moveDirA = -toPlayerNMoveA;
-                }
-                else
-                {
-                    agentDebug = "strafe";
-                    moveDirA = Vector2.Normalize(strafeA * 0.85f + toPlayerNMoveA * 0.15f);
-                }
-
-                Vector2 rawDirA = Vector2.Normalize(moveDirA * 1.0f + agentDriftDir * 0.33f);
-                agentWanderDir = Vector2.Lerp(agentWanderDir, rawDirA, 1f - MathF.Exp(-6f * dt));
-
-                Vector2 agentDesiredVel = agentWanderDir * wandererSpeed;
-                agentVel = _gameplay.Approach(agentVel, agentDesiredVel, wandererAccel * dt);
-
-                Vector2 agentDelta = agentVel * dt;
-                agentWorldPos.X += agentDelta.X;
-                bool agentMapBlockX = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockX = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
-                if (agentMapBlockX || agentCatBlockX)
-                {
-                    agentWorldPos.X -= agentDelta.X;
-                    agentVel.X = 0f;
-                }
-
-                agentWorldPos.Y += agentDelta.Y;
-                bool agentMapBlockY = map.OverlapsBlockingTile(agentWorldPos, mapScale, playerHitHalfW, playerHitHalfH);
-                bool agentCatBlockY = WanderingCat.NpcOverlapsAnyCat(agentWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats, catHitHalfW, catHitHalfH, _gameplay);
-                if (agentMapBlockY || agentCatBlockY)
-                {
-                    agentWorldPos.Y -= agentDelta.Y;
-                    agentVel.Y = 0f;
-                }
-
-                agentWorldPos.X = Math.Clamp(agentWorldPos.X, playerHitHalfW, Math.Max(playerHitHalfW, worldW - playerHitHalfW));
-                agentWorldPos.Y = Math.Clamp(agentWorldPos.Y, playerHitHalfH, Math.Max(playerHitHalfH, worldH - playerHitHalfH));
-                WanderingCat.NpcPushOutOfOverlappingCats(
-                    ref agentWorldPos,
-                    playerHitHalfW,
-                    playerHitHalfH,
-                    wanderingCats,
-                    catHitHalfW,
-                    catHitHalfH,
-                    worldW,
-                    worldH,
-                    playerHitHalfW,
-                    playerHitHalfH,
-                    _gameplay);
-
-                float aMovedSq = Vector2.DistanceSquared(agentWorldPos, agentLastPos);
-                if (aMovedSq < 0.75f * 0.75f)
-                {
-                    agentStuckTimer += dt;
-                }
-                else
-                {
-                    agentStuckTimer = 0f;
-                    agentLastPos = agentWorldPos;
-                }
-
-                if ((agentMapBlockX || agentMapBlockY) && agentStuckTimer > 0.35f)
-                {
-                    // no persistent path list anymore; allow NextStep to adapt naturally
-                }
-
-                if (agentVel.LengthSquared() > 10f * 10f)
-                {
-                    agentFaceDir = Vector2.Normalize(agentVel);
-                }
-
-                Vector2 aFace = agentFaceDir;
-                if (MathF.Abs(aFace.X) > MathF.Abs(aFace.Y))
-                {
-                    agentRow = aFace.X < 0f ? 1 : 2;
-                }
-                else
-                {
-                    agentRow = aFace.Y < 0f ? 3 : 0;
-                }
-
-                float aSpeed = agentVel.Length();
-                if (aSpeed > 10f)
-                {
-                    agentAnimTimer += dt * MathF.Max(0.35f, aSpeed / wandererSpeed);
-                    while (agentAnimTimer >= wandererAnimFrameSeconds)
-                    {
-                        agentAnimTimer -= wandererAnimFrameSeconds;
-                        agentCycleIndex = (agentCycleIndex + 1) % frameCycle.Length;
-                    }
-                }
-
-                agentShootCooldown -= dt;
-                if (agentShootCooldown <= 0f)
-                {
-                    Vector2 toPlayerA = playerWorldPos - agentWorldPos;
-                    float distSqA = toPlayerA.LengthSquared();
-                    if (distSqA > 40f * 40f
-                        && distSqA <= wandererShootMaxRange * wandererShootMaxRange
-                        && _gameplay.LineOfSightClear(map, agentWorldPos, playerWorldPos, mapScale, bulletHitHalf))
-                    {
-                        float distA = MathF.Sqrt(distSqA);
-                        Vector2 ndA = toPlayerA / distA;
-                        agentFaceDir = ndA;
-                        bullets.Add((agentWorldPos + ndA * bulletSpawnPad, ndA * wandererBulletSpeed, false, 0f, ""));
-                        agentShootCooldown = wandererShootIntervalMin
-                            + Random.Shared.NextSingle() * (wandererShootIntervalMax - wandererShootIntervalMin);
-                        if (gunshotSoundReady)
-                        {
-                            Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
-                            gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
-                        }
-                    }
-                    else
-                    {
-                        agentShootCooldown = wandererShootRetryWhenBlind;
-                    }
-                }
+                enemies[ei] = e;
             }
 
             // Camera follow (used for map + bullets this frame).
@@ -1077,50 +723,60 @@ public sealed class SleuthRayGame : ISleuthRayGame
 
                     bullets.RemoveAt(i);
                 }
-                else if (fromPlayer && wandererAlive && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wandererWorldPos, playerHitHalfW, playerHitHalfH))
-                {
-                    if (hitCooldown <= 0f)
-                    {
-                        hitCooldown = 0.20f;
-                        wandererHitFlashTimer = wandererHitFlashDuration;
-                        wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Hurt);
-                        wandererSpeechTimer = wandererSpeechShowSeconds;
-                        wandererHealth--;
-                        if (wandererHealth <= 0)
-                        {
-                            wandererAlive = false;
-                            wandererVel = Vector2.Zero;
-                            wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Death);
-                            wandererSpeechTimer = wandererSpeechShowSeconds;
-                            wandererRespawnTimer = MathF.Max(wandererRespawnDelay, wandererSpeechShowSeconds + 0.45f);
-                        }
-                        else
-                        {
-                            wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
-                        }
-                    }
-
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
-                }
-                else if (fromPlayer && agentAlive && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, agentWorldPos, playerHitHalfW, playerHitHalfH))
-                {
-                    if (hitCooldown <= 0f)
-                    {
-                        hitCooldown = 0.20f;
-                        agentHitFlashTimer = wandererHitFlashDuration;
-                        agentHealth--;
-                        if (agentHealth <= 0)
-                        {
-                            agentAlive = false;
-                            agentVel = Vector2.Zero;
-                            agentRespawnTimer = wandererRespawnDelay;
-                        }
-                    }
-
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
-                }
                 else if (fromPlayer)
                 {
+                    // Player cat-bullets can hit enemies or cats. Prefer enemies first for responsiveness.
+                    int hitEnemyIndex = -1;
+                    for (int ei = 0; ei < enemies.Count; ei++)
+                    {
+                        if (!enemies[ei].Alive)
+                        {
+                            continue;
+                        }
+
+                        if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, enemies[ei].WorldPos, playerHitHalfW, playerHitHalfH))
+                        {
+                            hitEnemyIndex = ei;
+                            break;
+                        }
+                    }
+
+                    if (hitEnemyIndex >= 0)
+                    {
+                        if (hitCooldown <= 0f)
+                        {
+                            hitCooldown = 0.20f;
+                            Enemy e = enemies[hitEnemyIndex];
+                            e.HitFlashTimer = enemyHitFlashDuration;
+                            e.Health--;
+                            if (e.Health <= 0)
+                            {
+                                e.Health = 0;
+                                e.Alive = false;
+                                e.Vel = Vector2.Zero;
+                                e.RespawnTimer = enemyRespawnDelay;
+                                if (e.Id == 0)
+                                {
+                                    wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Death);
+                                    wandererSpeechTimer = wandererSpeechShowSeconds;
+                                    // Ensure the line is readable before respawn.
+                                    e.RespawnTimer = MathF.Max(e.RespawnTimer, wandererSpeechShowSeconds + 0.45f);
+                                }
+                            }
+                            else if (e.Id == 0)
+                            {
+                                wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Hurt);
+                                wandererSpeechTimer = wandererSpeechShowSeconds;
+                                wandererChatterCooldown = MathF.Max(wandererChatterCooldown, 12f + Random.Shared.NextSingle() * 10f);
+                            }
+
+                            enemies[hitEnemyIndex] = e;
+                        }
+
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                        continue;
+                    }
+
                     int hitCatIndex = -1;
                     for (int ci = 0; ci < wanderingCats.Count; ci++)
                     {
@@ -1143,7 +799,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                             hitCooldown = 0.20f;
                             WanderingCat hitCat = wanderingCats[hitCatIndex];
                             hitCat.Health = Math.Max(0, hitCat.Health - 1);
-                            hitCat.HitFlashTimer = wandererHitFlashDuration;
+                            hitCat.HitFlashTimer = enemyHitFlashDuration;
                             if (hitCat.Health <= 0)
                             {
                                 hitCat.Health = 0;
@@ -1184,7 +840,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                             hitCooldown = 0.20f;
                             WanderingCat hitCat = wanderingCats[hitCatIndex];
                             hitCat.Health = Math.Max(0, hitCat.Health - 1);
-                            hitCat.HitFlashTimer = wandererHitFlashDuration;
+                            hitCat.HitFlashTimer = enemyHitFlashDuration;
                             if (hitCat.Health <= 0)
                             {
                                 hitCat.Health = 0;
@@ -1199,7 +855,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     else if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                     {
                         bullets.RemoveAt(i);
-                        playerHitFlashTimer = wandererHitFlashDuration;
+                        playerHitFlashTimer = enemyHitFlashDuration;
                         playerHealth--;
                         if (playerHealth <= 0)
                         {
@@ -1235,129 +891,90 @@ public sealed class SleuthRayGame : ISleuthRayGame
             float destW = frameWidth * scale;
             float destH = frameHeight * scale;
 
-            if (wandererAlive)
+            // Enemies
+            for (int ei = 0; ei < enemies.Count; ei++)
             {
-                int wanderFrame = frameCycle[wandererCycleIndex];
-                var wanderSrc = new Rectangle(wanderFrame * frameWidth, wandererRow * frameHeight, frameWidth, frameHeight);
-                Vector2 wanderScreen = cameraOffsetSmoothed + wandererWorldPos;
-                float wanderCharX = wanderScreen.X - destW / 2f;
-                float wanderCharY = wanderScreen.Y - destH / 2f;
-                var wanderDest = new Rectangle(wanderCharX, wanderCharY, destW, destH);
-                Color wanderTint = Color.WHITE;
-                if (wandererHitFlashTimer > 0f)
+                Enemy e = enemies[ei];
+                Texture2D tex = e.Archetype == EnemyArchetype.Sniper ? agentTexture : wandererTexture;
+
+                int enemyFrame = frameCycle[e.CycleIndex];
+                var enemySrc = new Rectangle(enemyFrame * frameWidth, e.DrawRow * frameHeight, frameWidth, frameHeight);
+                Vector2 enemyScreen = cameraOffsetSmoothed + e.WorldPos;
+                float enemyCharX = enemyScreen.X - destW / 2f;
+                float enemyCharY = enemyScreen.Y - destH / 2f;
+                var enemyDest = new Rectangle(enemyCharX, enemyCharY, destW, destH);
+
+                if (e.Alive)
                 {
-                    // Blink red/normal several times while the timer is active.
-                    bool on = ((int)(wandererHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
-                    if (on)
+                    Color tint = Color.WHITE;
+                    if (e.HitFlashTimer > 0f)
                     {
-                        wanderTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+                        bool on = ((int)(e.HitFlashTimer * enemyHitBlinkHz) % 2) == 0;
+                        if (on)
+                        {
+                            tint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
+                        }
+                    }
+                    else if (e.Archetype == EnemyArchetype.CatHunter)
+                    {
+                        tint = new Color((byte)235, (byte)245, (byte)255, (byte)255);
+                    }
+
+                    Raylib.DrawTexturePro(tex, enemySrc, enemyDest, Vector2.Zero, 0f, tint);
+                    Raylib.DrawRectangleLinesEx(enemyDest, spriteBoundsThick, spriteBoundsCol);
+
+                    float barW = destW - enemyHealthBarPadX * 2f;
+                    float barLeft = enemyScreen.X - barW * 0.5f;
+                    float barTop = enemyCharY - enemyHealthBarGapAboveSprite - enemyHealthBarHeight;
+                    var barBg = new Rectangle(barLeft, barTop, barW, enemyHealthBarHeight);
+                    Raylib.DrawRectangleRec(barBg, HealthBarPalette.Background);
+                    float hpFrac = e.MaxHealth > 0 ? e.Health / (float)e.MaxHealth : 0f;
+                    if (hpFrac > 0f)
+                    {
+                        var barFill = new Rectangle(barLeft, barTop, barW * hpFrac, enemyHealthBarHeight);
+                        Raylib.DrawRectangleRec(barFill, HealthBarPalette.Fill(hpFrac));
+                    }
+
+                    Raylib.DrawRectangleLinesEx(barBg, 1f, HealthBarPalette.Outline);
+
+                    if (e.Debug.Length > 0)
+                    {
+                        const int npcDbgFontPx = 14;
+                        int dbgW = Raylib.MeasureText(e.Debug, npcDbgFontPx);
+                        int dbgX = (int)(enemyScreen.X - dbgW * 0.5f);
+                        int dbgY = (int)(barTop - 18f);
+                        var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
+                        var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
+                        Raylib.DrawText(e.Debug, dbgX + 1, dbgY + 1, npcDbgFontPx, dbgShadow);
+                        Raylib.DrawText(e.Debug, dbgX, dbgY, npcDbgFontPx, dbgFg);
+                    }
+
+                    if (e.Id == 0 && wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
+                    {
+                        _speechBubbleUi.Draw(
+                            screenWidth,
+                            screenHeight,
+                            enemyScreen.X,
+                            barTop,
+                            wandererSpeech,
+                            wandererSpeechFontPx,
+                            wandererSpeechMaxContentWidth,
+                            wandererSpeechBubblePad);
                     }
                 }
-
-                Raylib.DrawTexturePro(wandererTexture, wanderSrc, wanderDest, Vector2.Zero, 0f, wanderTint);
-                Raylib.DrawRectangleLinesEx(wanderDest, spriteBoundsThick, spriteBoundsCol);
-
-                float barW = destW - wandererHealthBarPadX * 2f;
-                float barLeft = wanderScreen.X - barW * 0.5f;
-                float barTop = wanderCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-                var barBg = new Rectangle(barLeft, barTop, barW, wandererHealthBarHeight);
-                Raylib.DrawRectangleRec(barBg, HealthBarPalette.Background);
-                float hpFrac = wandererHealth / (float)wandererMaxHealth;
-                if (hpFrac > 0f)
+                else if (e.Id == 0 && wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
                 {
-                    var barFill = new Rectangle(barLeft, barTop, barW * hpFrac, wandererHealthBarHeight);
-                    Raylib.DrawRectangleRec(barFill, HealthBarPalette.Fill(hpFrac));
-                }
-
-                Raylib.DrawRectangleLinesEx(barBg, 1f, HealthBarPalette.Outline);
-
-                if (wandererDebug.Length > 0)
-                {
-                    const int npcDbgFontPx = 14;
-                    int dbgW = Raylib.MeasureText(wandererDebug, npcDbgFontPx);
-                    int dbgX = (int)(wanderScreen.X - dbgW * 0.5f);
-                    int dbgY = (int)(barTop - 18f);
-                    var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
-                    var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
-                    Raylib.DrawText(wandererDebug, dbgX + 1, dbgY + 1, npcDbgFontPx, dbgShadow);
-                    Raylib.DrawText(wandererDebug, dbgX, dbgY, npcDbgFontPx, dbgFg);
-                }
-
-                if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
-                {
+                    // Last words at the spot he dropped (sprite hidden while dead).
+                    float corpseBarTop = enemyCharY - enemyHealthBarGapAboveSprite - enemyHealthBarHeight;
                     _speechBubbleUi.Draw(
                         screenWidth,
                         screenHeight,
-                        wanderScreen.X,
-                        barTop,
+                        enemyScreen.X,
+                        corpseBarTop,
                         wandererSpeech,
                         wandererSpeechFontPx,
                         wandererSpeechMaxContentWidth,
                         wandererSpeechBubblePad);
-                }
-            }
-            else if (wandererSpeechTimer > 0f && wandererSpeech.Length > 0)
-            {
-                // Last words at the spot he dropped (sprite hidden while dead).
-                Vector2 corpseScreen = cameraOffsetSmoothed + wandererWorldPos;
-                float corpseCharY = corpseScreen.Y - destH / 2f;
-                float corpseBarTop = corpseCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-                _speechBubbleUi.Draw(
-                    screenWidth,
-                    screenHeight,
-                    corpseScreen.X,
-                    corpseBarTop,
-                    wandererSpeech,
-                    wandererSpeechFontPx,
-                    wandererSpeechMaxContentWidth,
-                    wandererSpeechBubblePad);
-            }
-
-            if (agentAlive)
-            {
-                int agentFrame = frameCycle[agentCycleIndex];
-                var agentSrc = new Rectangle(agentFrame * frameWidth, agentRow * frameHeight, frameWidth, frameHeight);
-                Vector2 agentScreen = cameraOffsetSmoothed + agentWorldPos;
-                float agentCharX = agentScreen.X - destW / 2f;
-                float agentCharY = agentScreen.Y - destH / 2f;
-                var agentDest = new Rectangle(agentCharX, agentCharY, destW, destH);
-                Color agentTint = Color.WHITE;
-                if (agentHitFlashTimer > 0f)
-                {
-                    bool on = ((int)(agentHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
-                    if (on)
-                    {
-                        agentTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
-                    }
-                }
-
-                Raylib.DrawTexturePro(agentTexture, agentSrc, agentDest, Vector2.Zero, 0f, agentTint);
-                Raylib.DrawRectangleLinesEx(agentDest, spriteBoundsThick, spriteBoundsCol);
-
-                float agentBarW = destW - wandererHealthBarPadX * 2f;
-                float agentBarLeft = agentScreen.X - agentBarW * 0.5f;
-                float agentBarTop = agentCharY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-                var agentBarBg = new Rectangle(agentBarLeft, agentBarTop, agentBarW, wandererHealthBarHeight);
-                Raylib.DrawRectangleRec(agentBarBg, HealthBarPalette.Background);
-                float agentHpFrac = agentHealth / (float)agentMaxHealth;
-                if (agentHpFrac > 0f)
-                {
-                    var agentBarFill = new Rectangle(agentBarLeft, agentBarTop, agentBarW * agentHpFrac, wandererHealthBarHeight);
-                    Raylib.DrawRectangleRec(agentBarFill, HealthBarPalette.Fill(agentHpFrac));
-                }
-
-                Raylib.DrawRectangleLinesEx(agentBarBg, 1f, HealthBarPalette.Outline);
-
-                if (agentDebug.Length > 0)
-                {
-                    const int npcDbgFontPx = 14;
-                    int dbgW = Raylib.MeasureText(agentDebug, npcDbgFontPx);
-                    int dbgX = (int)(agentScreen.X - dbgW * 0.5f);
-                    int dbgY = (int)(agentBarTop - 18f);
-                    var dbgShadow = new Color((byte)0, (byte)0, (byte)0, (byte)210);
-                    var dbgFg = new Color((byte)255, (byte)235, (byte)120, (byte)255);
-                    Raylib.DrawText(agentDebug, dbgX + 1, dbgY + 1, npcDbgFontPx, dbgShadow);
-                    Raylib.DrawText(agentDebug, dbgX, dbgY, npcDbgFontPx, dbgFg);
                 }
             }
 
@@ -1376,7 +993,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Color catTint = Color.WHITE;
                 if (wc.HitFlashTimer > 0f)
                 {
-                    bool on = ((int)(wc.HitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+                    bool on = ((int)(wc.HitFlashTimer * enemyHitBlinkHz) % 2) == 0;
                     if (on)
                     {
                         catTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
@@ -1433,7 +1050,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Color playerTint = Color.WHITE;
             if (playerHitFlashTimer > 0f)
             {
-                bool on = ((int)(playerHitFlashTimer * wandererHitBlinkHz) % 2) == 0;
+                bool on = ((int)(playerHitFlashTimer * enemyHitBlinkHz) % 2) == 0;
                 if (on)
                 {
                     playerTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
@@ -1443,15 +1060,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
             Raylib.DrawTexturePro(characterTexture, src, dest, Vector2.Zero, 0f, playerTint);
             Raylib.DrawRectangleLinesEx(dest, spriteBoundsThick, spriteBoundsCol);
 
-            float pBarW = destW - wandererHealthBarPadX * 2f;
+            float pBarW = destW - enemyHealthBarPadX * 2f;
             float pBarLeft = playerScreenPos.X - pBarW * 0.5f;
-            float pBarTop = charY - wandererHealthBarGapAboveSprite - wandererHealthBarHeight;
-            var pBarBg = new Rectangle(pBarLeft, pBarTop, pBarW, wandererHealthBarHeight);
+            float pBarTop = charY - enemyHealthBarGapAboveSprite - enemyHealthBarHeight;
+            var pBarBg = new Rectangle(pBarLeft, pBarTop, pBarW, enemyHealthBarHeight);
             Raylib.DrawRectangleRec(pBarBg, HealthBarPalette.Background);
             float pHpFrac = playerHealth / (float)playerMaxHealth;
             if (pHpFrac > 0f)
             {
-                var pBarFill = new Rectangle(pBarLeft, pBarTop, pBarW * pHpFrac, wandererHealthBarHeight);
+                var pBarFill = new Rectangle(pBarLeft, pBarTop, pBarW * pHpFrac, enemyHealthBarHeight);
                 Raylib.DrawRectangleRec(pBarFill, HealthBarPalette.Fill(pHpFrac));
             }
 
@@ -1490,7 +1107,7 @@ public sealed class SleuthRayGame : ISleuthRayGame
                 Vector2 catScreen = cameraOffsetSmoothed + wc.WorldPos;
                 float catW = catFrameSize * catDrawScale;
                 float catTop = catScreen.Y - catFrameSize * catDrawScale * 0.5f;
-                float catBarW = catW - wandererHealthBarPadX * 2f;
+                float catBarW = catW - enemyHealthBarPadX * 2f;
                 float catBarLeft = catScreen.X - catBarW * 0.5f;
                 float catBarTop = catTop - catHealthBarGapAboveSprite - catHealthBarHeight;
                 var catBarBg = new Rectangle(catBarLeft, catBarTop, catBarW, catHealthBarHeight);
@@ -1585,10 +1202,24 @@ public sealed class SleuthRayGame : ISleuthRayGame
             }
 
             // Enemies.
-            var wandererDot = new Color((byte)60, (byte)180, (byte)90, (byte)255);
-            var agentDot = new Color((byte)210, (byte)130, (byte)55, (byte)255);
-            if (wandererAlive) DrawRadarDot(wandererWorldPos, 2.8f, wandererDot);
-            if (agentAlive) DrawRadarDot(agentWorldPos, 2.8f, agentDot);
+            var chaserDot = new Color((byte)60, (byte)180, (byte)90, (byte)255);
+            var sniperDot = new Color((byte)210, (byte)130, (byte)55, (byte)255);
+            var hunterDot = new Color((byte)170, (byte)120, (byte)220, (byte)255);
+            for (int ei = 0; ei < enemies.Count; ei++)
+            {
+                if (!enemies[ei].Alive)
+                {
+                    continue;
+                }
+
+                Color col = enemies[ei].Archetype switch
+                {
+                    EnemyArchetype.Sniper => sniperDot,
+                    EnemyArchetype.CatHunter => hunterDot,
+                    _ => chaserDot
+                };
+                DrawRadarDot(enemies[ei].WorldPos, 2.8f, col);
+            }
 
             // Player.
             var playerDot = new Color((byte)70, (byte)150, (byte)235, (byte)255);
