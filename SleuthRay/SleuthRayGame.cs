@@ -1389,11 +1389,10 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             if (screenshotMode && frameIndex == 3 && screenshotPath is not null)
             {
-                string screenshotPathFull = Path.GetFullPath(screenshotPath);
-                Directory.CreateDirectory(Path.GetDirectoryName(screenshotPathFull)!);
-                Image img = Raylib.LoadImageFromScreen();
-                Raylib.ExportImage(img, screenshotPathFull);
-                Raylib.UnloadImage(img);
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(screenshotPath))!);
+                // Prefer passing the original path (often relative) to raylib.
+                // Some backends mis-handle fully-qualified paths here.
+                Raylib.TakeScreenshot(screenshotPath);
                 break;
             }
 
