@@ -1,3 +1,4 @@
+using System.Numerics;
 using Raylib_cs;
 
 namespace SleuthRay;
@@ -8,6 +9,8 @@ internal interface ICatTrayUi
         int screenW,
         int screenH,
         IReadOnlyList<PlayerCat> cats,
+        Vector2 playerWorldPos,
+        Vector2?[] deployedWorldPosByCatId,
         Texture2D[] catTextures,
         int catFrameSize);
 }
@@ -18,6 +21,8 @@ internal sealed class CatTrayUi : ICatTrayUi
         int screenW,
         int screenH,
         IReadOnlyList<PlayerCat> cats,
+        Vector2 playerWorldPos,
+        Vector2?[] deployedWorldPosByCatId,
         Texture2D[] catTextures,
         int catFrameSize)
     {
@@ -83,6 +88,41 @@ internal sealed class CatTrayUi : ICatTrayUi
                 int variant = Math.Clamp(cat.SpriteVariant, 0, catTextures.Length - 1);
                 Texture2D tex = catTextures[variant];
 
+                if (cat.Id >= 0
+                    && cat.Id < deployedWorldPosByCatId.Length
+                    && deployedWorldPosByCatId[cat.Id] is Vector2 deployedWorldPos)
+                {
+                    Vector2 d = deployedWorldPos - playerWorldPos;
+                    float lenSq = d.LengthSquared();
+                    if (lenSq > 4f)
+                    {
+                        Vector2 dn = d / MathF.Sqrt(lenSq);
+                        // Place arrow just left of the cat icon.
+                        float ax = sx + 2f;
+                        float ay = sy + slotH * 0.5f;
+                        float shaftLen = 16f;
+                        float headLen = 9f;
+                        var anchor = new Vector2(ax, ay);
+                        var arrowFill = new Color((byte)245, (byte)245, (byte)245, (byte)245);
+                        var arrowInk = new Color((byte)20, (byte)20, (byte)20, (byte)220);
+                        var tip = anchor + dn * (shaftLen + headLen);
+                        var shaftEnd = anchor + dn * shaftLen;
+                        Raylib.DrawLineEx(anchor, shaftEnd, 2.8f, arrowFill);
+                        Raylib.DrawLineEx(anchor, shaftEnd, 1.2f, arrowInk);
+
+                        // Arrow head as two wings (more recognizable than a filled triangle at this size).
+                        float wingBack = 10f;
+                        float wingOut = 7f;
+                        var perp = new Vector2(-dn.Y, dn.X);
+                        var w1 = tip - dn * wingBack + perp * wingOut;
+                        var w2 = tip - dn * wingBack - perp * wingOut;
+                        Raylib.DrawLineEx(tip, w1, 2.6f, arrowFill);
+                        Raylib.DrawLineEx(tip, w2, 2.6f, arrowFill);
+                        Raylib.DrawLineEx(tip, w1, 1.1f, arrowInk);
+                        Raylib.DrawLineEx(tip, w2, 1.1f, arrowInk);
+                    }
+                }
+
                 // Tray icon: stable idle pose (frame 0, idle row).
                 const int idleRow = 12;
                 var src = new Rectangle(0f, idleRow * catFrameSize, catFrameSize, catFrameSize);
@@ -90,7 +130,7 @@ internal sealed class CatTrayUi : ICatTrayUi
                 float iconLeft = sx + 8;
                 float iconTop = sy + (slotH - iconPx) * 0.5f;
                 var dst = new Rectangle(iconLeft, iconTop, iconPx, iconPx);
-                Raylib.DrawTexturePro(tex, src, dst, System.Numerics.Vector2.Zero, 0f, Color.WHITE);
+                Raylib.DrawTexturePro(tex, src, dst, Vector2.Zero, 0f, Color.WHITE);
 
                 string displayName = cat.Name.Length == 0 ? "Cat" : cat.Name;
                 int tx = (int)(iconLeft + iconPx + 10);

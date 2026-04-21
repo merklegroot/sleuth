@@ -1298,7 +1298,17 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            _catTrayUi.Draw(screenWidth, screenHeight, playerCats, catTextures, catFrameSize);
+            var deployedCatWorldPos = new Vector2?[playerCats.Length];
+            for (int i = 0; i < wanderingCats.Count; i++)
+            {
+                int id = wanderingCats[i].PlayerCatId;
+                if (id >= 0 && id < deployedCatWorldPos.Length)
+                {
+                    deployedCatWorldPos[id] = wanderingCats[i].WorldPos;
+                }
+            }
+
+            _catTrayUi.Draw(screenWidth, screenHeight, playerCats, playerWorldPos, deployedCatWorldPos, catTextures, catFrameSize);
 
             // Radar (top-right): player, enemies, cats in world-space.
             const float radarMargin = 14f;
