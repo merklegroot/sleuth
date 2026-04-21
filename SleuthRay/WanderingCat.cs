@@ -60,9 +60,16 @@ internal struct WanderingCat
     public int NavGoalTx;
     public int NavGoalTy;
 
-    public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth, int? spriteVariant = null)
+    public static WanderingCat SpawnAt(
+        Vector2 worldPos,
+        int idleRow,
+        string name,
+        int maxHealth,
+        int? spriteVariant = null,
+        int? health = null)
     {
         int mh = Math.Max(1, maxHealth);
+        int h = Math.Clamp(health ?? mh, 0, mh);
         return new()
         {
             WorldPos = worldPos,
@@ -82,7 +89,7 @@ internal struct WanderingCat
             ReturnTargetOffset = Vector2.Zero,
             ReturnWeavePhase = Random.Shared.NextSingle() * MathF.Tau,
             MaxHealth = mh,
-            Health = mh,
+            Health = h,
             HitFlashTimer = 0f,
             Disabled = false,
             NavWaypoint = worldPos,

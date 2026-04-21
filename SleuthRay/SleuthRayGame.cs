@@ -177,11 +177,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         // Along last aim direction: offset by ~half scaled gun width so the pivot sits past the torso, not inside it.
         const float gunPivotAlongAimExtraPx = 14f;
         const float gunFlashDuration = 0.22f;
-        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name, int CatVariant)>(48);
+        var bullets = new List<(Vector2 Pos, Vector2 Vel, bool FromPlayer, float HitCooldown, string Name, int CatVariant, int Health, int MaxHealth)>(48);
         float gunFlashTimer = 0f;
         Vector2 lastShotDir = new(0f, 1f);
         const int maxCatsInInventory = 5;
-        int catsInInventory = 3;
+        var catInventory = new List<CatInventoryItem>(maxCatsInInventory);
 
         // Pathfinder grids (cached per map+hitbox); used for smarter NPC/cat navigation.
         var npcPathfinder = new TilePathfinder(map, mapScale, playerHitHalfW, playerHitHalfH);
@@ -246,6 +246,14 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         const float catReturnHesitateSecondsMax = 0.65f;
         const int maxWanderingCats = 32;
         const int catMaxHealth = 5;
+
+        // Starting inventory: a few cats ready to fire.
+        for (int i = 0; i < 3 && catInventory.Count < maxCatsInInventory; i++)
+        {
+            int variant = Random.Shared.Next(0, catTextures.Length);
+            catInventory.Add(new CatInventoryItem(_catNamePicker.Pick(), catMaxHealth, catMaxHealth, variant));
+        }
+
         // Slightly taller than NPC bars so they stay readable on 64px cats; drawn after map overlay so roofs do not cover them.
         const float catHealthBarHeight = 7f;
         const float catHealthBarGapAboveSprite = 8f;
@@ -501,19 +509,20 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 wanderingCats[ci] = wc;
             }
 
-            if (catsInInventory < maxCatsInInventory)
+            if (catInventory.Count < maxCatsInInventory)
             {
                 for (int ci = wanderingCats.Count - 1; ci >= 0; ci--)
                 {
-                    if (catsInInventory >= maxCatsInInventory)
+                    if (catInventory.Count >= maxCatsInInventory)
                     {
                         break;
                     }
 
                     if (_gameplay.WorldRectsOverlap(playerWorldPos, playerHitHalfW, playerHitHalfH, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
                     {
+                        WanderingCat picked = wanderingCats[ci];
                         wanderingCats.RemoveAt(ci);
-                        catsInInventory++;
+                        catInventory.Add(new CatInventoryItem(picked.Name, picked.Health, picked.MaxHealth, picked.SpriteVariant));
                     }
                 }
             }
@@ -711,7 +720,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            bool firePressed = catsInInventory > 0
+            bool firePressed = catInventory.Count > 0
                 && !statsMenuOpen
                 && ((spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed);
             if (firePressed)
@@ -725,15 +734,23 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
                 }
 
+                CatInventoryItem firedCat = catInventory[0];
+                catInventory.RemoveAt(0);
                 Vector2 vel = dir * bulletSpeed;
-                int catVariant = Random.Shared.Next(0, catTextures.Length);
-                bullets.Add((playerWorldPos + dir * bulletSpawnPad, vel, true, 0f, _catNamePicker.Pick(), catVariant));
-                catsInInventory--;
+                bullets.Add((
+                    playerWorldPos + dir * bulletSpawnPad,
+                    vel,
+                    true,
+                    0f,
+                    firedCat.Name,
+                    firedCat.SpriteVariant,
+                    firedCat.Health,
+                    firedCat.MaxHealth));
             }
 
             for (int i = bullets.Count - 1; i >= 0; i--)
             {
-                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, string bulletName, int bulletCatVariant) = bullets[i];
+                (Vector2 pos, Vector2 vel, bool fromPlayer, float hitCooldown, string bulletName, int bulletCatVariant, int bulletHealth, int bulletMaxHealth) = bullets[i];
                 hitCooldown = MathF.Max(0f, hitCooldown - dt);
                 Vector2 newPos = pos + vel * dt;
                 if (newPos.X < 0f || newPos.Y < 0f || newPos.X > worldW || newPos.Y > worldH
@@ -746,7 +763,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                         && map.OverlapsBlockingTile(newPos, mapScale, bulletHitHalf, bulletHitHalf))
                     {
                         Vector2 spawnPos = _gameplay.FindWandererSpawn(map, pos, mapScale, catHitHalfW, catHitHalfH);
-                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName, catMaxHealth, bulletCatVariant));
+                        wanderingCats.Add(WanderingCat.SpawnAt(spawnPos, catIdleRow, bulletName, bulletMaxHealth, bulletCatVariant, bulletHealth));
                     }
 
                     bullets.RemoveAt(i);
@@ -801,7 +818,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             enemies[hitEnemyIndex] = e;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant, bulletHealth, bulletMaxHealth);
                         continue;
                     }
 
@@ -837,11 +854,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             wanderingCats[hitCatIndex] = hitCat;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant, bulletHealth, bulletMaxHealth);
                     }
                     else
                     {
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant, bulletHealth, bulletMaxHealth);
                     }
                 }
                 else if (!fromPlayer)
@@ -878,7 +895,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                             wanderingCats[hitCatIndex] = hitCat;
                         }
 
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant, bulletHealth, bulletMaxHealth);
                     }
                     else if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
                     {
@@ -900,7 +917,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     }
                     else
                     {
-                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant);
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName, bulletCatVariant, bulletHealth, bulletMaxHealth);
                     }
                 }
             }
@@ -1193,7 +1210,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             for (int i = 0; i < bullets.Count; i++)
             {
-                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _, string bName, int bCatVariant) = bullets[i];
+                (Vector2 bPos, Vector2 bVel, bool bFromPlayer, _, string bName, int bCatVariant, _, _) = bullets[i];
                 Vector2 screen = cameraOffsetSmoothed + bPos;
                 if (bFromPlayer)
                 {
@@ -1238,7 +1255,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 }
             }
 
-            _catTrayUi.Draw(screenWidth, screenHeight, wanderingCats, catTextures, catFrameSize);
+            _catTrayUi.Draw(screenWidth, screenHeight, catInventory, wanderingCats, catTextures, catFrameSize);
 
             // Radar (top-right): player, enemies, cats in world-space.
             const float radarMargin = 14f;
@@ -1324,7 +1341,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             Raylib.DrawText(hintLine3, hx + 2, hy + 2, hintFont, hintShadow);
             Raylib.DrawText(hintLine3, hx, hy, hintFont, hintFg);
 
-            string ammoText = $"Cats: {catsInInventory}";
+            string ammoText = $"Cats: {catInventory.Count}";
             int ammoFont = hintFont;
             int ammoPad = 10;
             int ammoW = Raylib.MeasureText(ammoText, ammoFont);

@@ -7,7 +7,8 @@ internal interface ICatTrayUi
     void Draw(
         int screenW,
         int screenH,
-        IReadOnlyList<WanderingCat> cats,
+        IReadOnlyList<CatInventoryItem> inventoryCats,
+        IReadOnlyList<WanderingCat> deployedCats,
         Texture2D[] catTextures,
         int catFrameSize);
 }
@@ -17,13 +18,28 @@ internal sealed class CatTrayUi : ICatTrayUi
     public void Draw(
         int screenW,
         int screenH,
-        IReadOnlyList<WanderingCat> cats,
+        IReadOnlyList<CatInventoryItem> inventoryCats,
+        IReadOnlyList<WanderingCat> deployedCats,
         Texture2D[] catTextures,
         int catFrameSize)
     {
-        if (cats.Count == 0 || catTextures.Length == 0 || catFrameSize <= 0)
+        int totalCats = inventoryCats.Count + deployedCats.Count;
+        if (totalCats == 0 || catTextures.Length == 0 || catFrameSize <= 0)
         {
             return;
+        }
+
+        var cats = new List<(string Name, int Health, int MaxHealth, int SpriteVariant, bool Deployed)>(totalCats);
+        for (int i = 0; i < inventoryCats.Count; i++)
+        {
+            CatInventoryItem c = inventoryCats[i];
+            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, false));
+        }
+
+        for (int i = 0; i < deployedCats.Count; i++)
+        {
+            WanderingCat c = deployedCats[i];
+            cats.Add((c.Name, c.Health, c.MaxHealth, c.SpriteVariant, true));
         }
 
         const int margin = 14;
@@ -56,6 +72,7 @@ internal sealed class CatTrayUi : ICatTrayUi
 
         var slotBg = new Color((byte)28, (byte)36, (byte)52, (byte)235);
         var slotOutline = new Color((byte)90, (byte)110, (byte)150, (byte)255);
+        var slotOutlineDeployed = new Color((byte)220, (byte)200, (byte)160, (byte)255);
         var fg = new Color((byte)235, (byte)242, (byte)255, (byte)255);
         var shadow = new Color((byte)0, (byte)0, (byte)0, (byte)200);
 
@@ -64,36 +81,34 @@ internal sealed class CatTrayUi : ICatTrayUi
         {
             for (int c = 0; c < maxSlotsPerRow && idx < shown; c++, idx++)
             {
-                WanderingCat wc = cats[idx];
+                (string name, int health, int maxHealth, int spriteVariant, bool deployed) = cats[idx];
 
                 int sx = left + pad + c * (slotW + gap);
                 int sy = top + pad + r * (slotH + gap);
                 var slot = new Rectangle(sx, sy, slotW, slotH);
                 Raylib.DrawRectangleRounded(slot, 0.16f, 8, slotBg);
-                Raylib.DrawRectangleRoundedLines(slot, 0.16f, 8, 2, slotOutline);
+                Raylib.DrawRectangleRoundedLines(slot, 0.16f, 8, 2, deployed ? slotOutlineDeployed : slotOutline);
 
-                int variant = Math.Clamp(wc.SpriteVariant, 0, catTextures.Length - 1);
+                int variant = Math.Clamp(spriteVariant, 0, catTextures.Length - 1);
                 Texture2D tex = catTextures[variant];
 
-                int stripFrameCount = wc.IsWalking ? 6 : 8;
-                int frame = stripFrameCount <= 0 ? 0 : ((wc.FrameIndex % stripFrameCount) + stripFrameCount) % stripFrameCount;
-                float srcX = frame * catFrameSize;
-                float srcY = wc.DrawRow * catFrameSize;
-                var src = new Rectangle(srcX, srcY, catFrameSize, catFrameSize);
+                // Tray icon: stable idle pose (frame 0, idle row).
+                const int idleRow = 12;
+                var src = new Rectangle(0f, idleRow * catFrameSize, catFrameSize, catFrameSize);
 
                 float iconLeft = sx + 8;
                 float iconTop = sy + (slotH - iconPx) * 0.5f;
                 var dst = new Rectangle(iconLeft, iconTop, iconPx, iconPx);
                 Raylib.DrawTexturePro(tex, src, dst, System.Numerics.Vector2.Zero, 0f, Color.WHITE);
 
-                string name = wc.Name.Length == 0 ? "Cat" : wc.Name;
+                string displayName = name.Length == 0 ? "Cat" : name;
                 int tx = (int)(iconLeft + iconPx + 10);
                 int ty = sy + 6;
-                Raylib.DrawText(name, tx + 1, ty + 1, linePx, shadow);
-                Raylib.DrawText(name, tx, ty, linePx, fg);
+                Raylib.DrawText(displayName, tx + 1, ty + 1, linePx, shadow);
+                Raylib.DrawText(displayName, tx, ty, linePx, fg);
 
-                int hp = Math.Max(0, wc.Health);
-                int mh = Math.Max(1, wc.MaxHealth);
+                int hp = Math.Max(0, health);
+                int mh = Math.Max(1, maxHealth);
                 float hpFrac = Math.Clamp(hp / (float)mh, 0f, 1f);
                 string hpText = $"{hp}/{mh}";
                 int hpw = Raylib.MeasureText(hpText, linePx);
