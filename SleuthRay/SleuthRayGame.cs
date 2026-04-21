@@ -958,8 +958,58 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     }
                     else
                     {
-                        e.WorldPos += pushDir * slideShoveDist;
-                        e.Vel += pushDir * slideShoveVel;
+                        Vector2 before = e.WorldPos;
+                        Vector2 delta = pushDir * slideShoveDist;
+
+                        // Prevent shoving enemies into walls: shrink/reject the push if it would overlap blocking tiles.
+                        float maxU = slideShoveDist;
+                        float u = maxU;
+                        const int shoveResolveSteps = 6;
+                        for (int s = 0; s < shoveResolveSteps; s++)
+                        {
+                            e.WorldPos = before + pushDir * u;
+                            if (!map.OverlapsBlockingTile(e.WorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+                            {
+                                break;
+                            }
+
+                            u *= 0.5f;
+                            if (u < 0.35f)
+                            {
+                                u = 0f;
+                                e.WorldPos = before;
+                                break;
+                            }
+                        }
+
+                        // If the full-vector push fails, try axis-separated nudges (common wall-slide case).
+                        if (u <= 0.001f)
+                        {
+                            Vector2 tryX = before + new Vector2(delta.X, 0f);
+                            e.WorldPos = tryX;
+                            if (map.OverlapsBlockingTile(e.WorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+                            {
+                                e.WorldPos = before;
+                            }
+                            else
+                            {
+                                before = e.WorldPos;
+                            }
+
+                            Vector2 tryY = before + new Vector2(0f, delta.Y);
+                            e.WorldPos = tryY;
+                            if (map.OverlapsBlockingTile(e.WorldPos, mapScale, playerHitHalfW, playerHitHalfH))
+                            {
+                                e.WorldPos = before;
+                            }
+                        }
+
+                        // Only apply impulse if we actually moved them.
+                        if (Vector2.DistanceSquared(e.WorldPos, before) > 0.25f)
+                        {
+                            e.Vel += pushDir * slideShoveVel;
+                        }
+
                         if (e.Id == 0)
                         {
                             wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Hurt);
