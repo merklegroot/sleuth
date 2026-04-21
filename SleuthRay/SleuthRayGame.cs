@@ -182,6 +182,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         Vector2 lastShotDir = new(0f, 1f);
         const int playerCatCount = 5;
         var playerCats = new PlayerCat[playerCatCount];
+        var healPlusParticles = new List<(Vector2 Pos, Vector2 Vel, float Age, float Lifetime, float Size)>(196);
 
         // Pathfinder grids (cached per map+hitbox); used for smarter NPC/cat navigation.
         var npcPathfinder = new TilePathfinder(map, mapScale, playerHitHalfW, playerHitHalfH);
@@ -392,6 +393,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 {
                     if (playerCats[i].State != PlayerCatState.Held)
                     {
+                        playerCats[i].HeldHealFxTimer = 0f;
                         continue;
                     }
 
@@ -399,10 +401,73 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     if (playerCats[i].Health >= maxH)
                     {
                         playerCats[i].Health = maxH;
+                        playerCats[i].HeldHealFxTimer = 0f;
                         continue;
                     }
 
                     playerCats[i].Health = MathF.Min(maxH, playerCats[i].Health + heldHealHpPerSecond * dt);
+
+                    // Emit small green "+" particles near the tray for cats that are actively healing.
+                    const float healFxEverySeconds = 0.22f;
+                    playerCats[i].HeldHealFxTimer += dt;
+                    while (playerCats[i].HeldHealFxTimer >= healFxEverySeconds)
+                    {
+                        playerCats[i].HeldHealFxTimer -= healFxEverySeconds;
+
+                        // Mirror tray slot layout so particles appear near the right cat.
+                        const int trayMargin = 14;
+                        const int trayPad = 10;
+                        const int trayGap = 8;
+                        const int slotH = 44;
+                        const int slotW = 176;
+                        int maxSlotsPerRow = Math.Max(1, (screenWidth - trayMargin * 2) / (slotW + trayGap));
+                        int rows = (playerCats.Length + maxSlotsPerRow - 1) / maxSlotsPerRow;
+                        rows = Math.Min(rows, 2);
+                        int shown = Math.Min(playerCats.Length, rows * maxSlotsPerRow);
+                        if (i >= shown)
+                        {
+                            break;
+                        }
+
+                        int trayW = Math.Min(
+                            screenWidth - trayMargin * 2,
+                            shown == 0 ? 0 : Math.Min(maxSlotsPerRow, shown) * slotW + (Math.Min(maxSlotsPerRow, shown) - 1) * trayGap);
+                        int trayH = shown == 0 ? 0 : rows * slotH + (rows - 1) * trayGap + trayPad * 2;
+                        int trayLeft = (screenWidth - trayW) / 2;
+                        int trayTop = screenHeight - trayMargin - trayH;
+                        int row = i / maxSlotsPerRow;
+                        int col = i % maxSlotsPerRow;
+                        float sx = trayLeft + trayPad + col * (slotW + trayGap);
+                        float sy = trayTop + trayPad + row * (slotH + trayGap);
+
+                        // Near left gutter (where the arrow is), slightly above center.
+                        float px = sx + 12f + (Random.Shared.NextSingle() - 0.5f) * 6f;
+                        float py = sy + slotH * 0.5f + (Random.Shared.NextSingle() - 0.5f) * 6f - 4f;
+                        float vx = (Random.Shared.NextSingle() - 0.5f) * 18f;
+                        float vy = -22f - Random.Shared.NextSingle() * 18f;
+                        float life = 0.55f + Random.Shared.NextSingle() * 0.25f;
+                        float size = 6.5f + Random.Shared.NextSingle() * 2.5f;
+                        healPlusParticles.Add((new Vector2(px, py), new Vector2(vx, vy), 0f, life, size));
+                    }
+                }
+            }
+
+            if (dt > 0f && healPlusParticles.Count > 0)
+            {
+                for (int pi = healPlusParticles.Count - 1; pi >= 0; pi--)
+                {
+                    var p = healPlusParticles[pi];
+                    p.Age += dt;
+                    if (p.Age >= p.Lifetime)
+                    {
+                        healPlusParticles.RemoveAt(pi);
+                        continue;
+                    }
+
+                    p.Pos += p.Vel * dt;
+                    // Gentle drift/slowdown; particles float up and fade out.
+                    p.Vel *= MathF.Pow(0.12f, dt);
+                    healPlusParticles[pi] = p;
                 }
             }
 
@@ -1345,6 +1410,19 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             }
 
             _catTrayUi.Draw(screenWidth, screenHeight, playerCats, playerWorldPos, deployedCatWorldPos, catTextures, catFrameSize);
+
+            // Heal particles (green "+") on top of the tray.
+            for (int pi = 0; pi < healPlusParticles.Count; pi++)
+            {
+                var p = healPlusParticles[pi];
+                float t = p.Lifetime <= 0.001f ? 1f : Math.Clamp(p.Age / p.Lifetime, 0f, 1f);
+                byte a = (byte)Math.Clamp(255f * (1f - t), 0f, 255f);
+                var col = new Color((byte)70, (byte)235, (byte)120, a);
+                float s = p.Size;
+                float thick = 2f;
+                Raylib.DrawLineEx(new Vector2(p.Pos.X - s * 0.5f, p.Pos.Y), new Vector2(p.Pos.X + s * 0.5f, p.Pos.Y), thick, col);
+                Raylib.DrawLineEx(new Vector2(p.Pos.X, p.Pos.Y - s * 0.5f), new Vector2(p.Pos.X, p.Pos.Y + s * 0.5f), thick, col);
+            }
 
             // Radar (top-right): player, enemies, cats in world-space.
             const float radarMargin = 14f;
