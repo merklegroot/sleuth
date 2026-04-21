@@ -84,13 +84,43 @@ internal sealed class Gameplay : IGameplay
     /// <inheritdoc />
     public Vector2 FindWandererSpawn(TileMap m, Vector2 preferred, float scale, float halfW, float halfH)
     {
+        float tw = m.TileWidth * scale;
+        float th = m.TileHeight * scale;
+        float worldW = m.Width * tw;
+        float worldH = m.Height * th;
+
         if (!m.OverlapsBlockingTile(preferred, scale, halfW, halfH))
         {
             return preferred;
         }
 
-        float tw = m.TileWidth * scale;
-        float th = m.TileHeight * scale;
+        bool TrySpawnInTile(int tx, int ty, out Vector2 pos)
+        {
+            // Tile-center is wrong for tall AABBs near the top map edge (center would stick out of the world).
+            // Try mid-cell and a foot-aligned point near the bottom of the tile.
+            float cxMid = (tx + 0.5f) * tw;
+            ReadOnlySpan<float> cyRaw = stackalloc float[]
+            {
+                (ty + 0.5f) * th,
+                (ty + 0.92f) * th,
+                (ty + 1f) * th - halfH - 1f,
+            };
+            for (int i = 0; i < cyRaw.Length; i++)
+            {
+                float cy = Math.Clamp(cyRaw[i], halfH, Math.Max(halfH, worldH - halfH));
+                float cx = Math.Clamp(cxMid, halfW, Math.Max(halfW, worldW - halfW));
+                var p = new Vector2(cx, cy);
+                if (!m.OverlapsBlockingTile(p, scale, halfW, halfH))
+                {
+                    pos = p;
+                    return true;
+                }
+            }
+
+            pos = default;
+            return false;
+        }
+
         int px = (int)MathF.Floor(preferred.X / tw);
         int py = (int)MathF.Floor(preferred.Y / th);
         px = Math.Clamp(px, 0, m.Width - 1);
@@ -115,16 +145,28 @@ internal sealed class Gameplay : IGameplay
                         continue;
                     }
 
-                    var center = new Vector2((tx + 0.5f) * tw, (ty + 0.5f) * th);
-                    if (!m.OverlapsBlockingTile(center, scale, halfW, halfH))
+                    if (TrySpawnInTile(tx, ty, out Vector2 found))
                     {
-                        return center;
+                        return found;
                     }
                 }
             }
         }
 
-        return preferred;
+        for (int ty = 0; ty < m.Height; ty++)
+        {
+            for (int tx = 0; tx < m.Width; tx++)
+            {
+                if (TrySpawnInTile(tx, ty, out Vector2 found))
+                {
+                    return found;
+                }
+            }
+        }
+
+        return new Vector2(
+            Math.Clamp(preferred.X, halfW, Math.Max(halfW, worldW - halfW)),
+            Math.Clamp(preferred.Y, halfH, Math.Max(halfH, worldH - halfH)));
     }
 
     /// <inheritdoc />

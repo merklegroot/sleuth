@@ -52,6 +52,8 @@ internal struct WanderingCat
     public int Health;
     public int MaxHealth;
     public float HitFlashTimer;
+    /// <summary>At 0 health the cat stops moving on its own but stays in the world until picked up.</summary>
+    public bool Disabled;
 
     public static WanderingCat SpawnAt(Vector2 worldPos, int idleRow, string name, int maxHealth)
     {
@@ -76,12 +78,31 @@ internal struct WanderingCat
             MaxHealth = mh,
             Health = mh,
             HitFlashTimer = 0f,
+            Disabled = false,
         };
     }
 
     public static void Tick(ref WanderingCat c, TileMap map, float mapScale, float dt, float worldW, float worldH, Vector2 playerWorldPos, in CatWanderParams p)
     {
         c.HitFlashTimer = MathF.Max(0f, c.HitFlashTimer - dt);
+        if (c.Disabled)
+        {
+            c.IsWalking = false;
+            c.WalkTimeLeft = 0f;
+            c.DebugAction = "disabled";
+            c.DrawRow = p.IdleRow;
+            c.AnimTimer += dt;
+            while (c.AnimTimer >= p.IdleFrameSeconds)
+            {
+                c.AnimTimer -= p.IdleFrameSeconds;
+                c.FrameIndex = (c.FrameIndex + 1) % p.IdleFrameCount;
+            }
+
+            c.WorldPos.X = Math.Clamp(c.WorldPos.X, p.HitHalfW, Math.Max(p.HitHalfW, worldW - p.HitHalfW));
+            c.WorldPos.Y = Math.Clamp(c.WorldPos.Y, p.HitHalfH, Math.Max(p.HitHalfH, worldH - p.HitHalfH));
+            return;
+        }
+
         c.AgeSeconds += dt;
         float returnW = 0f;
         if (p.ReturnRampSeconds > 0f && c.AgeSeconds > p.ReturnDelaySeconds)

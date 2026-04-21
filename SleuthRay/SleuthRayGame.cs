@@ -102,7 +102,14 @@ public sealed class SleuthRayGame : ISleuthRayGame
         const float aimReticleLineThick = 2f;
         const float cameraFollow = 14f; // higher = tighter camera
         Vector2 playerScreenPos = new(screenWidth / 2f, screenHeight / 2f);
-        Vector2 playerWorldPos = new(map.Width * map.TileWidth * mapScale / 2f, map.Height * map.TileHeight * mapScale / 2f);
+        float worldW0 = map.Width * map.TileWidth * mapScale;
+        float worldH0 = map.Height * map.TileHeight * mapScale;
+        Vector2 playerWorldPos = _gameplay.FindWandererSpawn(
+            map,
+            new Vector2(worldW0 * 0.5f, worldH0 * 0.5f),
+            mapScale,
+            playerHitHalfW,
+            playerHitHalfH);
         Vector2 playerSpawnWorldPos = playerWorldPos;
         Vector2 playerVel = Vector2.Zero;
         const int playerMaxHealth = 8;
@@ -967,6 +974,11 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     int hitCatIndex = -1;
                     for (int ci = 0; ci < wanderingCats.Count; ci++)
                     {
+                        if (wanderingCats[ci].Disabled)
+                        {
+                            continue;
+                        }
+
                         if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
                         {
                             hitCatIndex = ci;
@@ -980,16 +992,15 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         {
                             hitCooldown = 0.20f;
                             WanderingCat hitCat = wanderingCats[hitCatIndex];
-                            hitCat.Health--;
+                            hitCat.Health = Math.Max(0, hitCat.Health - 1);
                             hitCat.HitFlashTimer = wandererHitFlashDuration;
                             if (hitCat.Health <= 0)
                             {
-                                wanderingCats.RemoveAt(hitCatIndex);
+                                hitCat.Health = 0;
+                                hitCat.Disabled = true;
                             }
-                            else
-                            {
-                                wanderingCats[hitCatIndex] = hitCat;
-                            }
+
+                            wanderingCats[hitCatIndex] = hitCat;
                         }
 
                         bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
@@ -999,24 +1010,61 @@ public sealed class SleuthRayGame : ISleuthRayGame
                         bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
                     }
                 }
-                else if (!fromPlayer && _gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
+                else if (!fromPlayer)
                 {
-                    bullets.RemoveAt(i);
-                    playerHitFlashTimer = wandererHitFlashDuration;
-                    playerHealth--;
-                    if (playerHealth <= 0)
+                    int hitCatIndex = -1;
+                    for (int ci = 0; ci < wanderingCats.Count; ci++)
                     {
-                        playerWorldPos = playerSpawnWorldPos;
-                        playerVel = Vector2.Zero;
-                        playerHealth = playerMaxHealth;
-                        playerHitFlashTimer = 0f;
-                        bullets.Clear();
-                        break;
+                        if (wanderingCats[ci].Disabled)
+                        {
+                            continue;
+                        }
+
+                        if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, wanderingCats[ci].WorldPos, catHitHalfW, catHitHalfH))
+                        {
+                            hitCatIndex = ci;
+                            break;
+                        }
                     }
-                }
-                else
-                {
-                    bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+
+                    if (hitCatIndex >= 0)
+                    {
+                        if (hitCooldown <= 0f)
+                        {
+                            hitCooldown = 0.20f;
+                            WanderingCat hitCat = wanderingCats[hitCatIndex];
+                            hitCat.Health = Math.Max(0, hitCat.Health - 1);
+                            hitCat.HitFlashTimer = wandererHitFlashDuration;
+                            if (hitCat.Health <= 0)
+                            {
+                                hitCat.Health = 0;
+                                hitCat.Disabled = true;
+                            }
+
+                            wanderingCats[hitCatIndex] = hitCat;
+                        }
+
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                    }
+                    else if (_gameplay.CircleIntersectsWorldRect(newPos, bulletRadius, playerWorldPos, playerHitHalfW, playerHitHalfH))
+                    {
+                        bullets.RemoveAt(i);
+                        playerHitFlashTimer = wandererHitFlashDuration;
+                        playerHealth--;
+                        if (playerHealth <= 0)
+                        {
+                            playerWorldPos = playerSpawnWorldPos;
+                            playerVel = Vector2.Zero;
+                            playerHealth = playerMaxHealth;
+                            playerHitFlashTimer = 0f;
+                            bullets.Clear();
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        bullets[i] = (newPos, vel, fromPlayer, hitCooldown, bulletName);
+                    }
                 }
             }
 
@@ -1159,6 +1207,10 @@ public sealed class SleuthRayGame : ISleuthRayGame
                     {
                         catTint = new Color((byte)255, (byte)25, (byte)25, (byte)255);
                     }
+                }
+                else if (wc.Disabled)
+                {
+                    catTint = new Color((byte)190, (byte)190, (byte)200, (byte)255);
                 }
 
                 Raylib.DrawTexturePro(catTexture, catSrc, catDest, Vector2.Zero, 0f, catTint);
