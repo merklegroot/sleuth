@@ -1128,16 +1128,16 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 {
                     playerCats[firedIndex].State = PlayerCatState.InFlight;
                     PlayerCat firedCat = playerCats[firedIndex];
-                Vector2 vel = dir * bulletSpeed;
-                bullets.Add((
-                    playerWorldPos + dir * bulletSpawnPad,
-                    vel,
-                    true,
-                    0f,
-                    firedCat.Id,
-                    firedCat.SpriteVariant,
-                    firedCat.Health,
-                    firedCat.MaxHealth));
+                    Vector2 vel = dir * bulletSpeed;
+                    bullets.Add((
+                        playerWorldPos + dir * bulletSpawnPad,
+                        vel,
+                        true,
+                        0f,
+                        firedCat.Id,
+                        firedCat.SpriteVariant,
+                        firedCat.Health,
+                        firedCat.MaxHealth));
                 }
             }
 
