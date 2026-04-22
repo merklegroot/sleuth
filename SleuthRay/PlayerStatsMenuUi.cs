@@ -139,8 +139,9 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText("1: gunshot", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
         float waveY0 = gunshotBtn.Y + (btnH - waveH) * 0.5f;
         var gunshotWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY0, waveW, waveH);
+        bool gunshotWaveHover = Raylib.CheckCollisionPointRec(mouse, gunshotWave);
         DrawWave(gunshotWave, gunshotWaveform, waveBg, waveOutline, waveInk);
-        if (click && gunshotHover)
+        if (click && (gunshotHover || gunshotWaveHover))
         {
             soundRequest = PlayerStatsMenuUiSoundRequest.Gunshot;
         }
@@ -155,8 +156,9 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText("2: meow", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
         float waveY1 = meowBtn.Y + (btnH - waveH) * 0.5f;
         var meowWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY1, waveW, waveH);
+        bool meowWaveHover = Raylib.CheckCollisionPointRec(mouse, meowWave);
         DrawWave(meowWave, meowWaveform, waveBg, waveOutline, waveInk);
-        if (click && meowHover)
+        if (click && (meowHover || meowWaveHover))
         {
             soundRequest = PlayerStatsMenuUiSoundRequest.Meow;
         }
