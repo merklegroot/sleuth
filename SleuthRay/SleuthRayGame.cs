@@ -118,10 +118,41 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
         Sound meowSound = default;
         bool meowSoundReady = false;
+        float[] gunshotWaveform = Array.Empty<float>();
+        float[] meowWaveform = Array.Empty<float>();
+
+        {
+            // Prefer the same bytes that back the gunshot audio (override or embedded) for waveform rendering.
+            byte[]? gunshotBytes = null;
+            try
+            {
+                string? overridePath = Environment.GetEnvironmentVariable("SLEUTHRAY_GUNSHOT_WAV");
+                if (!string.IsNullOrWhiteSpace(overridePath))
+                {
+                    string p = Path.GetFullPath(overridePath.Trim());
+                    if (File.Exists(p))
+                    {
+                        gunshotBytes = File.ReadAllBytes(p);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            gunshotBytes ??= ReadEmbeddedBytesOrNull("gunshot.wav");
+            if (gunshotBytes is not null)
+            {
+                _ = WavWaveform.TryComputePeaks(gunshotBytes, peakCount: 96, out gunshotWaveform);
+            }
+        }
+
         {
             byte[]? meowBytes = ReadEmbeddedBytesOrNull("mixkit-sweet-kitty-meow-93-trimmed.wav");
             if (meowBytes is not null && meowBytes.Length > 0)
             {
+                _ = WavWaveform.TryComputePeaks(meowBytes, peakCount: 96, out meowWaveform);
                 Wave w = Raylib.LoadWaveFromMemory(".wav", meowBytes);
                 if (Raylib.IsWaveReady(w))
                 {
@@ -1933,6 +1964,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     mapScale,
                     mouse,
                     mouseLeftClick,
+                    gunshotWaveform,
+                    meowWaveform,
                     out PlayerStatsMenuUiSoundRequest soundRequest);
 
                 if (soundRequest == PlayerStatsMenuUiSoundRequest.Gunshot && gunshotSoundReady)
