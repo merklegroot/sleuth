@@ -13,7 +13,17 @@ public interface IPlayerStatsMenuUi
         Vector2 worldPos,
         float mapTileW,
         float mapTileH,
-        float mapScale);
+        float mapScale,
+        Vector2 mouseScreenPos,
+        bool mouseLeftClick,
+        out PlayerStatsMenuUiSoundRequest soundRequest);
+}
+
+public enum PlayerStatsMenuUiSoundRequest
+{
+    None = 0,
+    Gunshot = 1,
+    Meow = 2,
 }
 
 internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
@@ -27,8 +37,12 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Vector2 worldPos,
         float mapTileW,
         float mapTileH,
-        float mapScale)
+        float mapScale,
+        Vector2 mouseScreenPos,
+        bool mouseLeftClick,
+        out PlayerStatsMenuUiSoundRequest soundRequest)
     {
+        soundRequest = PlayerStatsMenuUiSoundRequest.None;
         Raylib.DrawRectangle(0, 0, screenW, screenH, new Color((byte)0, (byte)0, (byte)0, (byte)145));
 
         const int titlePx = 28;
@@ -65,9 +79,46 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
 
         Raylib.DrawText("Sounds", tx, ty, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
         ty += bodyPx + 8;
-        Raylib.DrawText("1: gunshot", tx, ty, bodyPx, new Color((byte)170, (byte)188, (byte)210, (byte)255));
-        ty += bodyPx + 6;
-        Raylib.DrawText("2: meow", tx, ty, bodyPx, new Color((byte)170, (byte)188, (byte)210, (byte)255));
+        Vector2 mouse = mouseScreenPos;
+        bool click = mouseLeftClick;
+
+        var soundLineCol = new Color((byte)170, (byte)188, (byte)210, (byte)255);
+        var btnBg = new Color((byte)18, (byte)24, (byte)38, (byte)235);
+        var btnBgHover = new Color((byte)26, (byte)34, (byte)54, (byte)245);
+        var btnInk = new Color((byte)235, (byte)242, (byte)255, (byte)255);
+        var btnOutline = new Color((byte)90, (byte)110, (byte)150, (byte)255);
+
+        const int btnW = 64;
+        const int btnH = 24;
+        const int btnFontPx = 16;
+        const int btnGap = 10;
+
+        Rectangle gunshotBtn = new(tx, ty - 1, btnW, btnH);
+        bool gunshotHover = Raylib.CheckCollisionPointRec(mouse, gunshotBtn);
+        Raylib.DrawRectangleRounded(gunshotBtn, 0.35f, 10, gunshotHover ? btnBgHover : btnBg);
+        Raylib.DrawRectangleRoundedLines(gunshotBtn, 0.35f, 10, 2, btnOutline);
+        const string playText = "Play";
+        int playW = Raylib.MeasureText(playText, btnFontPx);
+        Raylib.DrawText(playText, (int)(gunshotBtn.X + (gunshotBtn.Width - playW) / 2f), (int)(gunshotBtn.Y + 4), btnFontPx, btnInk);
+        Raylib.DrawText("1: gunshot", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
+        if (click && gunshotHover)
+        {
+            soundRequest = PlayerStatsMenuUiSoundRequest.Gunshot;
+        }
+
+        ty += bodyPx + 8;
+
+        Rectangle meowBtn = new(tx, ty - 1, btnW, btnH);
+        bool meowHover = Raylib.CheckCollisionPointRec(mouse, meowBtn);
+        Raylib.DrawRectangleRounded(meowBtn, 0.35f, 10, meowHover ? btnBgHover : btnBg);
+        Raylib.DrawRectangleRoundedLines(meowBtn, 0.35f, 10, 2, btnOutline);
+        Raylib.DrawText(playText, (int)(meowBtn.X + (meowBtn.Width - playW) / 2f), (int)(meowBtn.Y + 4), btnFontPx, btnInk);
+        Raylib.DrawText("2: meow", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
+        if (click && meowHover)
+        {
+            soundRequest = PlayerStatsMenuUiSoundRequest.Meow;
+        }
+
         ty += bodyPx + 24;
 
         string hint = "Tab or gamepad Back / View to close";

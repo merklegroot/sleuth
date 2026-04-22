@@ -180,6 +180,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool prevIHeld = false;
         bool prevSound1Held = false;
         bool prevSound2Held = false;
+        bool prevMouseLeftHeld = false;
         bool[] prevGamepadBackHeld = new bool[4];
         bool playerInvincible = false;
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
@@ -1917,6 +1918,10 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             if (statsMenuOpen)
             {
+                Vector2 mouse = Raylib.GetMousePosition();
+                bool mouseLeftHeld = Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
+                bool mouseLeftClick = mouseLeftHeld && !prevMouseLeftHeld;
+
                 _playerStatsMenuUi.Draw(
                     screenWidth,
                     screenHeight,
@@ -1925,7 +1930,22 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     playerWorldPos,
                     map.TileWidth,
                     map.TileHeight,
-                    mapScale);
+                    mapScale,
+                    mouse,
+                    mouseLeftClick,
+                    out PlayerStatsMenuUiSoundRequest soundRequest);
+
+                if (soundRequest == PlayerStatsMenuUiSoundRequest.Gunshot && gunshotSoundReady)
+                {
+                    Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
+                }
+                else if (soundRequest == PlayerStatsMenuUiSoundRequest.Meow && meowSoundReady)
+                {
+                    Raylib.PlaySound(meowSound);
+                }
+
+                prevMouseLeftHeld = mouseLeftHeld;
             }
 
             Raylib.EndDrawing();
