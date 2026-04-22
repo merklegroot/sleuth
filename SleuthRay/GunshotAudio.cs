@@ -11,7 +11,7 @@ public interface IGunshotAudio
 
 internal sealed class GunshotAudio : IGunshotAudio
 {
-    public const string EmbeddedResourceName = "gunshot.wav";
+    public const string EmbeddedResourceName = "mixkit-sweet-kitty-meow-93-trimmed.wav";
 
     public int VoiceCount => 6;
 

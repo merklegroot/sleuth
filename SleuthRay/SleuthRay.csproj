@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\wanderer_talk.json" LogicalName="wanderer_talk.json" />
-    <EmbeddedResource Include="Resources\gunshot.wav" LogicalName="gunshot.wav" />
+    <EmbeddedResource Include="assets\sounds\mixkit-sweet-kitty-meow-93-trimmed.wav" LogicalName="mixkit-sweet-kitty-meow-93-trimmed.wav" />
     <EmbeddedResource Include="res\cat_names.txt" LogicalName="cat_names.txt" />
   </ItemGroup>
 

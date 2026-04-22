@@ -260,13 +260,16 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         const int maxWanderingCats = 32;
         const int catMaxHealth = 5;
 
+        var usedCatNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < playerCats.Length; i++)
         {
             int variant = Random.Shared.Next(0, catTextures.Length);
+            string nm = _catNamePicker.PickExcluding(usedCatNames);
+            usedCatNames.Add(nm);
             playerCats[i] = new PlayerCat
             {
                 Id = i,
-                Name = _catNamePicker.Pick(),
+                Name = nm,
                 MaxHealth = catMaxHealth,
                 Health = catMaxHealth,
                 SpriteVariant = variant,

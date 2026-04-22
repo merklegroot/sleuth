@@ -39,6 +39,16 @@ Handgun / revolver-style sound effects (WAV). The author has stated on the itch.
 
 ---
 
+## Mixkit — Cat sound effects
+
+- **Collection:** [Free Cat Sound Effects](https://mixkit.co/free-sound-effects/cat/)  
+- **Provider:** [Mixkit](https://mixkit.co) (Envato)  
+- **License:** [Mixkit License](https://mixkit.co/license/) — use the **Sound Effects Free License** for SFX you download from Mixkit.
+
+Individual clips are from Mixkit’s free cat SFX collection. Read the current license text on Mixkit before shipping; credit **Mixkit** (and link to the collection or mixkit.co) wherever you list third-party audio.
+
+---
+
 ## Last tick — 32x32 Pixel kittens Cats (Animated NPC)
 
 - **Pack:** [32x32 Pixel kittens Cats — Animated NPC](https://last-tick.itch.io/animated-pixel-kittens-cats-32x32)  
@@ -55,4 +65,5 @@ Use in personal and commercial projects is allowed. You may not redistribute or 
 - *Ranitayas Guns Pack* — Ranitaya Studios  
 - *Super Retro World* character & interior art — Gif  
 - *Free Single HandGun Sound Effects Pack* — Dan Sfx ([itch.io](https://cdansantana.itch.io/hgsfx))  
+- *Cat sound effects* — Mixkit ([mixkit.co/free-sound-effects/cat](https://mixkit.co/free-sound-effects/cat/))  
 - *32x32 Pixel kittens Cats — Animated NPC* — Last tick ([itch.io](https://last-tick.itch.io/animated-pixel-kittens-cats-32x32))  
