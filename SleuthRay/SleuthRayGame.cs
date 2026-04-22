@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 using Microsoft.Extensions.Options;
 using Raylib_cs;
 
@@ -101,6 +102,45 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         }
         #endif
 
+        // Inventory/status soundboard: a second clip for quick preview.
+        static byte[]? ReadEmbeddedBytesOrNull(string logicalName)
+        {
+            using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(logicalName);
+            if (stream is null)
+            {
+                return null;
+            }
+
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
+        }
+
+        Sound meowSound = default;
+        bool meowSoundReady = false;
+        {
+            byte[]? meowBytes = ReadEmbeddedBytesOrNull("mixkit-sweet-kitty-meow-93-trimmed.wav");
+            if (meowBytes is not null && meowBytes.Length > 0)
+            {
+                Wave w = Raylib.LoadWaveFromMemory(".wav", meowBytes);
+                if (Raylib.IsWaveReady(w))
+                {
+                    meowSound = Raylib.LoadSoundFromWave(w);
+                    Raylib.UnloadWave(w);
+                    if (Raylib.IsSoundReady(meowSound))
+                    {
+                        Raylib.SetSoundVolume(meowSound, 0.9f);
+                        Raylib.SetSoundPitch(meowSound, 1f);
+                        meowSoundReady = true;
+                    }
+                    else
+                    {
+                        meowSound = default;
+                    }
+                }
+            }
+        }
+
         const float mapScale = 3f;
         // World-space half extents of the player collision box (centered on player world position).
         const float playerHitHalfW = 12f;
@@ -138,6 +178,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool prevF11Held = false;
         bool prevCmdEnterHeld = false;
         bool prevIHeld = false;
+        bool prevSound1Held = false;
+        bool prevSound2Held = false;
         bool[] prevGamepadBackHeld = new bool[4];
         bool playerInvincible = false;
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
@@ -1888,6 +1930,23 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             Raylib.EndDrawing();
 
+            // Soundboard (only active while the stats menu is open).
+            bool sound1Held = Raylib.IsKeyDown(KeyboardKey.KEY_ONE) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_1);
+            bool sound2Held = Raylib.IsKeyDown(KeyboardKey.KEY_TWO) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_2);
+            if (statsMenuOpen)
+            {
+                if (sound1Held && !prevSound1Held && gunshotSoundReady)
+                {
+                    Raylib.PlaySound(gunshotVoices[gunshotVoiceNext]);
+                    gunshotVoiceNext = (gunshotVoiceNext + 1) % _gunshotAudio.VoiceCount;
+                }
+
+                if (sound2Held && !prevSound2Held && meowSoundReady)
+                {
+                    Raylib.PlaySound(meowSound);
+                }
+            }
+
             if (screenshot.Enabled && frameIndex == 3 && screenshot.ScreenshotPath is not null)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(screenshot.ScreenshotPath))!);
@@ -1912,6 +1971,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             prevF11Held = f11Held;
             prevCmdEnterHeld = cmdEnterHeld;
             prevIHeld = iHeld;
+            prevSound1Held = sound1Held;
+            prevSound2Held = sound2Held;
 
             for (int g = 0; g < 4; g++)
             {
@@ -1937,6 +1998,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             {
                 Raylib.UnloadSound(gunshotVoices[gi]);
             }
+        }
+
+        if (meowSoundReady)
+        {
+            Raylib.UnloadSound(meowSound);
         }
 
         Raylib.CloseAudioDevice();

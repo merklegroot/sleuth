@@ -35,7 +35,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int bodyPx = 20;
         const int hintPx = 16;
         int panelW = Math.Min(480, screenW - 40);
-        int panelH = Math.Min(320, screenH - 40);
+        int panelH = Math.Min(380, screenH - 40);
         int px = (screenW - panelW) / 2;
         int py = (screenH - panelH) / 2;
 
@@ -61,6 +61,13 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText("Inventory", tx, ty, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
         ty += bodyPx + 8;
         Raylib.DrawText("No items yet.", tx, ty, bodyPx, new Color((byte)150, (byte)160, (byte)175, (byte)255));
+        ty += bodyPx + 18;
+
+        Raylib.DrawText("Sounds", tx, ty, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
+        ty += bodyPx + 8;
+        Raylib.DrawText("1: gunshot", tx, ty, bodyPx, new Color((byte)170, (byte)188, (byte)210, (byte)255));
+        ty += bodyPx + 6;
+        Raylib.DrawText("2: meow", tx, ty, bodyPx, new Color((byte)170, (byte)188, (byte)210, (byte)255));
         ty += bodyPx + 24;
 
         string hint = "Tab or gamepad Back / View to close";
