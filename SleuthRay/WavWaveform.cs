@@ -27,6 +27,7 @@ internal static class WavWaveform
         uint sampleRate = 0;
         ushort bitsPerSample = 0;
         ReadOnlySpan<byte> data = default;
+        ReadOnlySpan<byte> fmtChunk = default;
 
         int off = 12;
         while (off + 8 <= wavBytes.Length)
@@ -42,6 +43,7 @@ internal static class WavWaveform
             ReadOnlySpan<byte> chunk = wavBytes.Slice(off, (int)size);
             if (id.SequenceEqual("fmt "u8) && size >= 16)
             {
+                fmtChunk = chunk;
                 formatTag = BinaryPrimitives.ReadUInt16LittleEndian(chunk.Slice(0, 2));
                 channels = BinaryPrimitives.ReadUInt16LittleEndian(chunk.Slice(2, 2));
                 sampleRate = BinaryPrimitives.ReadUInt32LittleEndian(chunk.Slice(4, 4));
@@ -64,8 +66,28 @@ internal static class WavWaveform
             return false;
         }
 
-        bool pcm = formatTag == 1;
-        bool f32 = formatTag == 3 && bitsPerSample == 32;
+        // WAVE_FORMAT_EXTENSIBLE (65534) stores the actual sub-format as a GUID in the fmt extension.
+        // We'll treat it as PCM or IEEE float when it declares those subformats.
+        const ushort WAVE_FORMAT_PCM = 1;
+        const ushort WAVE_FORMAT_IEEE_FLOAT = 3;
+        const ushort WAVE_FORMAT_EXTENSIBLE = 65534;
+
+        ushort effectiveFormatTag = formatTag;
+        if (formatTag == WAVE_FORMAT_EXTENSIBLE)
+        {
+            if (fmtChunk.Length < 40)
+            {
+                return false;
+            }
+
+            // fmt extension layout (after first 16 bytes):
+            // cbSize (2), validBitsPerSample (2), channelMask (4), subFormat GUID (16)  => +24 bytes
+            ReadOnlySpan<byte> subFormat = fmtChunk.Slice(24, 16);
+            effectiveFormatTag = SubFormatToWavTagOrUnknown(subFormat);
+        }
+
+        bool pcm = effectiveFormatTag == WAVE_FORMAT_PCM;
+        bool f32 = effectiveFormatTag == WAVE_FORMAT_IEEE_FLOAT && bitsPerSample == 32;
         if (!pcm && !f32)
         {
             return false;
@@ -118,6 +140,42 @@ internal static class WavWaveform
         }
 
         return true;
+    }
+
+    static ushort SubFormatToWavTagOrUnknown(ReadOnlySpan<byte> guid16)
+    {
+        // KSDATAFORMAT_SUBTYPE_PCM:
+        // {00000001-0000-0010-8000-00AA00389B71}
+        // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT:
+        // {00000003-0000-0010-8000-00AA00389B71}
+        if (guid16.Length != 16)
+        {
+            return 0;
+        }
+
+        uint data1 = BinaryPrimitives.ReadUInt32LittleEndian(guid16.Slice(0, 4));
+        ushort data2 = BinaryPrimitives.ReadUInt16LittleEndian(guid16.Slice(4, 2));
+        ushort data3 = BinaryPrimitives.ReadUInt16LittleEndian(guid16.Slice(6, 2));
+        ReadOnlySpan<byte> data4 = guid16.Slice(8, 8);
+
+        if (data2 != 0x0000 || data3 != 0x0010)
+        {
+            return 0;
+        }
+
+        // 80 00 00 AA 00 38 9B 71
+        ReadOnlySpan<byte> tail = stackalloc byte[] { 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 };
+        if (!data4.SequenceEqual(tail))
+        {
+            return 0;
+        }
+
+        return data1 switch
+        {
+            0x0000_0001 => 1,
+            0x0000_0003 => 3,
+            _ => 0
+        };
     }
 
     static float ReadF32(ReadOnlySpan<byte> data, int offset)

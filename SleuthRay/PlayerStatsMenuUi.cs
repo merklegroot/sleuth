@@ -53,7 +53,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int bodyPx = 20;
         const int hintPx = 16;
         int panelW = Math.Min(480, screenW - 40);
-        int panelH = Math.Min(380, screenH - 40);
+        int panelH = Math.Min(420, screenH - 40);
         int px = (screenW - panelW) / 2;
         int py = (screenH - panelH) / 2;
 
@@ -98,7 +98,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int btnGap = 10;
         const int waveGap = 10;
         int waveW = Math.Max(120, panelW - (22 + btnW + btnGap + 160));
-        int waveH = 24;
+        int waveH = 44;
         var waveBg = new Color((byte)12, (byte)16, (byte)26, (byte)210);
         var waveOutline = new Color((byte)70, (byte)90, (byte)125, (byte)255);
         var waveInk = new Color((byte)170, (byte)220, (byte)255, (byte)255);
@@ -135,7 +135,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         int playW = Raylib.MeasureText(playText, btnFontPx);
         Raylib.DrawText(playText, (int)(gunshotBtn.X + (gunshotBtn.Width - playW) / 2f), (int)(gunshotBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("1: gunshot", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
-        var gunshotWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, gunshotBtn.Y, waveW, waveH);
+        float waveY0 = gunshotBtn.Y + (btnH - waveH) * 0.5f;
+        var gunshotWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY0, waveW, waveH);
         DrawWave(gunshotWave, gunshotWaveform, waveBg, waveOutline, waveInk);
         if (click && gunshotHover)
         {
@@ -150,7 +151,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawRectangleRoundedLines(meowBtn, 0.35f, 10, 2, btnOutline);
         Raylib.DrawText(playText, (int)(meowBtn.X + (meowBtn.Width - playW) / 2f), (int)(meowBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("2: meow", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
-        var meowWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, meowBtn.Y, waveW, waveH);
+        float waveY1 = meowBtn.Y + (btnH - waveH) * 0.5f;
+        var meowWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY1, waveW, waveH);
         DrawWave(meowWave, meowWaveform, waveBg, waveOutline, waveInk);
         if (click && meowHover)
         {
