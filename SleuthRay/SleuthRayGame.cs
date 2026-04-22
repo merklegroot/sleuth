@@ -62,7 +62,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
         const string hintLine1 = "Tab: status & inventory";
         const string hintLine2 = "Cmd+Enter or F11: fullscreen";
-        const string hintLine3 = "Esc: exit";
+        const string hintLine3 = "P / Start: pause & resume";
+        const string hintLine4 = "Esc: exit";
 
         Raylib.InitWindow(screenWidth, screenHeight, _options.WindowTitle);
         Raylib.SetTargetFPS(60);
@@ -209,11 +210,13 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool prevF11Held = false;
         bool prevCmdEnterHeld = false;
         bool prevIHeld = false;
+        bool prevPHeld = false;
         bool prevSound1Held = false;
         bool prevSound2Held = false;
         bool prevMouseLeftHeld = false;
         bool[] prevGamepadBackHeld = new bool[4];
-        bool playerInvincible = false;
+        bool[] prevGamepadStartHeld = new bool[4];
+        bool playerInvincible = true;
         // Per slot: analog R2 may sit above zero when released; only fire again after a clean release (hysteresis).
         bool[] r2AnalogArmed = [true, true, true, true];
         bool[] prevRightTrigger1Held = new bool[4];
@@ -397,6 +400,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
         bool statsMenuOpen = false;
+        bool gamePaused = true;
         wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
         wandererSpeechTimer = wandererSpeechShowSeconds;
         wandererChatterCooldown = 18f + Random.Shared.NextSingle() * 12f;
@@ -478,7 +482,29 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 statsMenuOpen = !statsMenuOpen;
             }
 
-            if (statsMenuOpen)
+            bool pHeld = Raylib.IsKeyDown(KeyboardKey.KEY_P);
+            bool pauseToggle = pHeld && !prevPHeld;
+            for (int g = 0; g < 4; g++)
+            {
+                if (!Raylib.IsGamepadAvailable(g))
+                {
+                    continue;
+                }
+
+                bool startHeld = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_RIGHT);
+                if (startHeld && !prevGamepadStartHeld[g])
+                {
+                    pauseToggle = true;
+                    break;
+                }
+            }
+
+            if (pauseToggle)
+            {
+                gamePaused = !gamePaused;
+            }
+
+            if (statsMenuOpen || gamePaused)
             {
                 dt = 0f;
             }
@@ -661,7 +687,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     slideCooldownTimer = slideCooldownSeconds;
                 }
             }
-            else if (slidePressed && slideCooldownTimer <= 0f && !statsMenuOpen)
+            else if (slidePressed && slideCooldownTimer <= 0f && !statsMenuOpen && !gamePaused)
             {
                 Vector2 dir = moveDir;
                 if (dir.LengthSquared() <= 1e-6f && playerVel.LengthSquared() > 1e-6f)
@@ -1163,6 +1189,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
 
             bool firePressed = playerCats.Any(c => c.State == PlayerCatState.Held)
                 && !statsMenuOpen
+                && !gamePaused
                 && ((spaceHeld && !prevSpaceHeld) || padFirePressed || triggerR2FirePressed);
             if (firePressed)
             {
@@ -1850,15 +1877,37 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             var playerDot = new Color((byte)70, (byte)150, (byte)235, (byte)255);
             DrawRadarDot(playerWorldPos, 3.2f, playerDot);
 
+            if (gamePaused && !statsMenuOpen)
+            {
+                Raylib.DrawRectangle(0, 0, screenWidth, screenHeight, new Color((byte)0, (byte)0, (byte)0, (byte)95));
+                const int pauseFont = 44;
+                const string pauseTitle = "PAUSED";
+                int pauseW = Raylib.MeasureText(pauseTitle, pauseFont);
+                Raylib.DrawText(
+                    pauseTitle,
+                    (screenWidth - pauseW) / 2 + 2,
+                    screenHeight / 2 - pauseFont / 2 + 2,
+                    pauseFont,
+                    new Color((byte)0, (byte)0, (byte)0, (byte)200));
+                Raylib.DrawText(
+                    pauseTitle,
+                    (screenWidth - pauseW) / 2,
+                    screenHeight / 2 - pauseFont / 2,
+                    pauseFont,
+                    new Color((byte)235, (byte)242, (byte)255, (byte)255));
+            }
+
             const int hintFont = 22;
             const int hintPad = 12;
             const int hintLineGap = 4;
             const int hintMargin = 14;
             int hintW = Math.Max(
                 Raylib.MeasureText(hintLine1, hintFont),
-                Math.Max(Raylib.MeasureText(hintLine2, hintFont), Raylib.MeasureText(hintLine3, hintFont)));
+                Math.Max(
+                    Raylib.MeasureText(hintLine2, hintFont),
+                    Math.Max(Raylib.MeasureText(hintLine3, hintFont), Raylib.MeasureText(hintLine4, hintFont))));
             int hintBoxW = hintW + hintPad * 2;
-            int hintBoxH = hintFont * 3 + hintLineGap * 2 + hintPad * 2;
+            int hintBoxH = hintFont * 4 + hintLineGap * 3 + hintPad * 2;
             // Top-right.
             int hintBoxX = Math.Max(hintMargin, screenWidth - hintBoxW - hintMargin);
             int hintBoxY = hintMargin;
@@ -1877,6 +1926,9 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             hy += hintFont + hintLineGap;
             Raylib.DrawText(hintLine3, hx + 2, hy + 2, hintFont, hintShadow);
             Raylib.DrawText(hintLine3, hx, hy, hintFont, hintFg);
+            hy += hintFont + hintLineGap;
+            Raylib.DrawText(hintLine4, hx + 2, hy + 2, hintFont, hintShadow);
+            Raylib.DrawText(hintLine4, hx, hy, hintFont, hintFg);
 
             int heldCats = 0;
             for (int i = 0; i < playerCats.Length; i++)
@@ -2024,6 +2076,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             prevF11Held = f11Held;
             prevCmdEnterHeld = cmdEnterHeld;
             prevIHeld = iHeld;
+            prevPHeld = pHeld;
             prevSound1Held = sound1Held;
             prevSound2Held = sound2Held;
 
@@ -2034,6 +2087,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     prevRightTrigger1Held[g] = false;
                     prevRightTrigger2Held[g] = false;
                     prevGamepadBackHeld[g] = false;
+                    prevGamepadStartHeld[g] = false;
                     r2AnalogArmed[g] = true;
                     continue;
                 }
@@ -2041,6 +2095,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                 prevRightTrigger1Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
                 prevRightTrigger2Held[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_RIGHT_TRIGGER_2);
                 prevGamepadBackHeld[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_LEFT);
+                prevGamepadStartHeld[g] = Raylib.IsGamepadButtonDown(g, GamepadButton.GAMEPAD_BUTTON_MIDDLE_RIGHT);
             }
         }
 

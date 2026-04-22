@@ -53,7 +53,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int bodyPx = 20;
         const int hintPx = 16;
         int panelW = Math.Min(480, screenW - 40);
-        int panelH = Math.Min(420, screenH - 40);
+        int panelH = Math.Min(460, screenH - 40);
         int px = (screenW - panelW) / 2;
         int py = (screenH - panelH) / 2;
 
@@ -99,6 +99,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int waveGap = 10;
         int waveW = Math.Max(120, panelW - (22 + btnW + btnGap + 160));
         int waveH = 44;
+        // Baseline `ty` is shared by label + button row; waveform is taller than the button — leave room so rows don't overlap.
+        int soundRowStep = waveH + 14;
         var waveBg = new Color((byte)12, (byte)16, (byte)26, (byte)210);
         var waveOutline = new Color((byte)70, (byte)90, (byte)125, (byte)255);
         var waveInk = new Color((byte)170, (byte)220, (byte)255, (byte)255);
@@ -143,7 +145,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
             soundRequest = PlayerStatsMenuUiSoundRequest.Gunshot;
         }
 
-        ty += bodyPx + 8;
+        ty += soundRowStep;
 
         Rectangle meowBtn = new(tx, ty - 1, btnW, btnH);
         bool meowHover = Raylib.CheckCollisionPointRec(mouse, meowBtn);
