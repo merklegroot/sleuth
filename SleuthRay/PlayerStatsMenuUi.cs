@@ -67,7 +67,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int titlePx = 28;
         const int bodyPx = 20;
         const int hintPx = 16;
-        int panelW = Math.Min(480, screenW - 40);
+        int panelW = Math.Min(720, screenW - 40);
         int panelH = Math.Min(500, screenH - 40);
         int px = (screenW - panelW) / 2;
         int py = (screenH - panelH) / 2;
