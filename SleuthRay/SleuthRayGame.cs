@@ -404,6 +404,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
         bool statsMenuOpen = false;
+        var statsMenuPage = PlayerStatsMenuPage.StatusInventory;
         bool gamePaused = true;
         wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);
         wandererSpeechTimer = wandererSpeechShowSeconds;
@@ -2024,7 +2025,11 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     meowWaveform,
                     gunshotAudioInfo,
                     meowAudioInfo,
+                    statsMenuPage,
+                    out PlayerStatsMenuPage nextPage,
                     out PlayerStatsMenuUiSoundRequest soundRequest);
+
+                statsMenuPage = nextPage;
 
                 if (soundRequest == PlayerStatsMenuUiSoundRequest.Gunshot && gunshotSoundReady)
                 {
@@ -2044,7 +2049,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             // Soundboard (only active while the stats menu is open).
             bool sound1Held = Raylib.IsKeyDown(KeyboardKey.KEY_ONE) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_1);
             bool sound2Held = Raylib.IsKeyDown(KeyboardKey.KEY_TWO) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_2);
-            if (statsMenuOpen)
+            if (statsMenuOpen && statsMenuPage == PlayerStatsMenuPage.Samples)
             {
                 if (sound1Held && !prevSound1Held && gunshotSoundReady)
                 {
