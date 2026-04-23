@@ -149,7 +149,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText(playText, (int)(gunshotBtn.X + (gunshotBtn.Width - playW) / 2f), (int)(gunshotBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("1: gunshot", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
 
-        float waveY0 = gunshotBtn.Y + (btnH - waveH) * 0.5f;
+        // Top-align the waveform with the button so it doesn't creep upward into the metadata line.
+        float waveY0 = gunshotBtn.Y;
         var gunshotWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY0, waveW, waveH);
         bool gunshotWaveHover = Raylib.CheckCollisionPointRec(mouse, gunshotWave);
         DrawWave(gunshotWave, gunshotWaveform, waveBg, waveOutline, waveInk);
@@ -173,7 +174,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText(playText, (int)(meowBtn.X + (meowBtn.Width - playW) / 2f), (int)(meowBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("2: meow", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
 
-        float waveY1 = meowBtn.Y + (btnH - waveH) * 0.5f;
+        float waveY1 = meowBtn.Y;
         var meowWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY1, waveW, waveH);
         bool meowWaveHover = Raylib.CheckCollisionPointRec(mouse, meowWave);
         DrawWave(meowWave, meowWaveform, waveBg, waveOutline, waveInk);
