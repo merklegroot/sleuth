@@ -1,9 +1,50 @@
 using System.Buffers.Binary;
+using System.Globalization;
 
 namespace SleuthRay;
 
+internal ref struct WavPcmWaveView
+{
+    public uint SampleRate;
+    public ushort Channels;
+    public ushort BitsPerSample;
+    public bool IsFloat32;
+    public ReadOnlySpan<byte> Data;
+    public int FrameCount;
+
+    public readonly float DurationSeconds => FrameCount / (float)SampleRate;
+}
+
 internal static class WavWaveform
 {
+    /// <summary>Returns sample rate (Hz) and duration (seconds) for PCM / IEEE-float WAV data.</summary>
+    public static bool TryGetAudioInfo(ReadOnlySpan<byte> wavBytes, out int sampleRateHz, out float durationSeconds)
+    {
+        sampleRateHz = 0;
+        durationSeconds = 0f;
+        if (!TryPreparePcmWave(wavBytes, out WavPcmWaveView view))
+        {
+            return false;
+        }
+
+        sampleRateHz = (int)view.SampleRate;
+        durationSeconds = view.DurationSeconds;
+        return sampleRateHz > 0 && durationSeconds >= 0f;
+    }
+
+    /// <summary>Formats duration and sample rate for UI (invariant).</summary>
+    public static string FormatAudioInfoLine(ReadOnlySpan<byte> wavBytes)
+    {
+        if (!TryGetAudioInfo(wavBytes, out int sr, out float dur))
+        {
+            return "";
+        }
+
+        string d = dur.ToString("0.###", CultureInfo.InvariantCulture);
+        string s = sr.ToString("N0", CultureInfo.InvariantCulture);
+        return $"{d} s · {s} Hz";
+    }
+
     /// <summary>
     /// Computes absolute peak amplitudes (0..1) for a waveform preview.
     /// Supports uncompressed PCM (8/16/24/32-bit) and IEEE float (32-bit).
@@ -11,12 +52,64 @@ internal static class WavWaveform
     public static bool TryComputePeaks(ReadOnlySpan<byte> wavBytes, int peakCount, out float[] peaks)
     {
         peaks = Array.Empty<float>();
-        if (peakCount <= 0 || wavBytes.Length < 44)
+        if (peakCount <= 0 || !TryPreparePcmWave(wavBytes, out WavPcmWaveView view))
         {
             return false;
         }
 
-        // RIFF header
+        ReadOnlySpan<byte> data = view.Data;
+        int frameCount = view.FrameCount;
+        ushort channels = view.Channels;
+        ushort bitsPerSample = view.BitsPerSample;
+        bool f32 = view.IsFloat32;
+
+        int bytesPerSample = (bitsPerSample + 7) / 8;
+        int frameBytes = bytesPerSample * channels;
+
+        peaks = new float[peakCount];
+        int framesPerBucket = Math.Max(1, frameCount / peakCount);
+
+        int frameIndex = 0;
+        for (int i = 0; i < peakCount; i++)
+        {
+            float peak = 0f;
+            int end = (i == peakCount - 1) ? frameCount : Math.Min(frameCount, frameIndex + framesPerBucket);
+
+            for (; frameIndex < end; frameIndex++)
+            {
+                int frameOff = frameIndex * frameBytes;
+                float sumAbs = 0f;
+
+                for (int ch = 0; ch < channels; ch++)
+                {
+                    int sOff = frameOff + ch * bytesPerSample;
+                    float v = f32
+                        ? ReadF32(data, sOff)
+                        : ReadPcm(data, sOff, bitsPerSample);
+                    sumAbs += MathF.Abs(v);
+                }
+
+                float avgAbs = sumAbs / channels;
+                if (avgAbs > peak)
+                {
+                    peak = avgAbs;
+                }
+            }
+
+            peaks[i] = Math.Clamp(peak, 0f, 1f);
+        }
+
+        return true;
+    }
+
+    static bool TryPreparePcmWave(ReadOnlySpan<byte> wavBytes, out WavPcmWaveView view)
+    {
+        view = default;
+        if (wavBytes.Length < 44)
+        {
+            return false;
+        }
+
         if (!wavBytes[..4].SequenceEqual("RIFF"u8) || !wavBytes[8..12].SequenceEqual("WAVE"u8))
         {
             return false;
@@ -57,7 +150,7 @@ internal static class WavWaveform
             off += (int)size;
             if ((off & 1) == 1)
             {
-                off++; // word align
+                off++;
             }
         }
 
@@ -66,8 +159,6 @@ internal static class WavWaveform
             return false;
         }
 
-        // WAVE_FORMAT_EXTENSIBLE (65534) stores the actual sub-format as a GUID in the fmt extension.
-        // We'll treat it as PCM or IEEE float when it declares those subformats.
         const ushort WAVE_FORMAT_PCM = 1;
         const ushort WAVE_FORMAT_IEEE_FLOAT = 3;
         const ushort WAVE_FORMAT_EXTENSIBLE = 65534;
@@ -80,8 +171,6 @@ internal static class WavWaveform
                 return false;
             }
 
-            // fmt extension layout (after first 16 bytes):
-            // cbSize (2), validBitsPerSample (2), channelMask (4), subFormat GUID (16)  => +24 bytes
             ReadOnlySpan<byte> subFormat = fmtChunk.Slice(24, 16);
             effectiveFormatTag = SubFormatToWavTagOrUnknown(subFormat);
         }
@@ -106,48 +195,20 @@ internal static class WavWaveform
             return false;
         }
 
-        peaks = new float[peakCount];
-        int framesPerBucket = Math.Max(1, frameCount / peakCount);
-
-        int frameIndex = 0;
-        for (int i = 0; i < peakCount; i++)
+        view = new WavPcmWaveView
         {
-            float peak = 0f;
-            int end = (i == peakCount - 1) ? frameCount : Math.Min(frameCount, frameIndex + framesPerBucket);
-
-            for (; frameIndex < end; frameIndex++)
-            {
-                int frameOff = frameIndex * frameBytes;
-                float sumAbs = 0f;
-
-                for (int ch = 0; ch < channels; ch++)
-                {
-                    int sOff = frameOff + ch * bytesPerSample;
-                    float v = f32
-                        ? ReadF32(data, sOff)
-                        : ReadPcm(data, sOff, bitsPerSample);
-                    sumAbs += MathF.Abs(v);
-                }
-
-                float avgAbs = sumAbs / channels;
-                if (avgAbs > peak)
-                {
-                    peak = avgAbs;
-                }
-            }
-
-            peaks[i] = Math.Clamp(peak, 0f, 1f);
-        }
-
+            SampleRate = sampleRate,
+            Channels = channels,
+            BitsPerSample = bitsPerSample,
+            IsFloat32 = f32,
+            Data = data,
+            FrameCount = frameCount,
+        };
         return true;
     }
 
     static ushort SubFormatToWavTagOrUnknown(ReadOnlySpan<byte> guid16)
     {
-        // KSDATAFORMAT_SUBTYPE_PCM:
-        // {00000001-0000-0010-8000-00AA00389B71}
-        // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT:
-        // {00000003-0000-0010-8000-00AA00389B71}
         if (guid16.Length != 16)
         {
             return 0;
@@ -163,7 +224,6 @@ internal static class WavWaveform
             return 0;
         }
 
-        // 80 00 00 AA 00 38 9B 71
         ReadOnlySpan<byte> tail = stackalloc byte[] { 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 };
         if (!data4.SequenceEqual(tail))
         {

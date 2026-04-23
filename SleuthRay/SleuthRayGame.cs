@@ -121,6 +121,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         bool meowSoundReady = false;
         float[] gunshotWaveform = Array.Empty<float>();
         float[] meowWaveform = Array.Empty<float>();
+        string gunshotAudioInfo = "";
+        string meowAudioInfo = "";
 
         {
             // Prefer the same bytes that back the gunshot audio (override or embedded) for waveform rendering.
@@ -146,6 +148,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             if (gunshotBytes is not null)
             {
                 _ = WavWaveform.TryComputePeaks(gunshotBytes, peakCount: 96, out gunshotWaveform);
+                gunshotAudioInfo = WavWaveform.FormatAudioInfoLine(gunshotBytes);
             }
         }
 
@@ -154,6 +157,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             if (meowBytes is not null && meowBytes.Length > 0)
             {
                 _ = WavWaveform.TryComputePeaks(meowBytes, peakCount: 96, out meowWaveform);
+                meowAudioInfo = WavWaveform.FormatAudioInfoLine(meowBytes);
                 Wave w = Raylib.LoadWaveFromMemory(".wav", meowBytes);
                 if (Raylib.IsWaveReady(w))
                 {
@@ -2018,6 +2022,8 @@ internal sealed class SleuthRayGame : ISleuthRayGame
                     mouseLeftClick,
                     gunshotWaveform,
                     meowWaveform,
+                    gunshotAudioInfo,
+                    meowAudioInfo,
                     out PlayerStatsMenuUiSoundRequest soundRequest);
 
                 if (soundRequest == PlayerStatsMenuUiSoundRequest.Gunshot && gunshotSoundReady)

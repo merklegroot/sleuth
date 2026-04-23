@@ -18,6 +18,8 @@ public interface IPlayerStatsMenuUi
         bool mouseLeftClick,
         ReadOnlySpan<float> gunshotWaveform,
         ReadOnlySpan<float> meowWaveform,
+        string gunshotAudioInfo,
+        string meowAudioInfo,
         out PlayerStatsMenuUiSoundRequest soundRequest);
 }
 
@@ -44,6 +46,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         bool mouseLeftClick,
         ReadOnlySpan<float> gunshotWaveform,
         ReadOnlySpan<float> meowWaveform,
+        string gunshotAudioInfo,
+        string meowAudioInfo,
         out PlayerStatsMenuUiSoundRequest soundRequest)
     {
         soundRequest = PlayerStatsMenuUiSoundRequest.None;
@@ -53,7 +57,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         const int bodyPx = 20;
         const int hintPx = 16;
         int panelW = Math.Min(480, screenW - 40);
-        int panelH = Math.Min(460, screenH - 40);
+        int panelH = Math.Min(500, screenH - 40);
         int px = (screenW - panelW) / 2;
         int py = (screenH - panelH) / 2;
 
@@ -104,6 +108,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         var waveBg = new Color((byte)12, (byte)16, (byte)26, (byte)210);
         var waveOutline = new Color((byte)70, (byte)90, (byte)125, (byte)255);
         var waveInk = new Color((byte)170, (byte)220, (byte)255, (byte)255);
+        var metaCol = new Color((byte)150, (byte)168, (byte)195, (byte)255);
 
         static void DrawWave(Rectangle r, ReadOnlySpan<float> peaks, Color bg, Color outline, Color ink)
         {
@@ -129,6 +134,12 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
             }
         }
 
+        if (gunshotAudioInfo.Length > 0)
+        {
+            Raylib.DrawText(gunshotAudioInfo, tx, ty, hintPx, metaCol);
+            ty += hintPx + 6;
+        }
+
         Rectangle gunshotBtn = new(tx, ty - 1, btnW, btnH);
         bool gunshotHover = Raylib.CheckCollisionPointRec(mouse, gunshotBtn);
         Raylib.DrawRectangleRounded(gunshotBtn, 0.35f, 10, gunshotHover ? btnBgHover : btnBg);
@@ -137,6 +148,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         int playW = Raylib.MeasureText(playText, btnFontPx);
         Raylib.DrawText(playText, (int)(gunshotBtn.X + (gunshotBtn.Width - playW) / 2f), (int)(gunshotBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("1: gunshot", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
+
         float waveY0 = gunshotBtn.Y + (btnH - waveH) * 0.5f;
         var gunshotWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY0, waveW, waveH);
         bool gunshotWaveHover = Raylib.CheckCollisionPointRec(mouse, gunshotWave);
@@ -148,12 +160,19 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
 
         ty += soundRowStep;
 
+        if (meowAudioInfo.Length > 0)
+        {
+            Raylib.DrawText(meowAudioInfo, tx, ty, hintPx, metaCol);
+            ty += hintPx + 6;
+        }
+
         Rectangle meowBtn = new(tx, ty - 1, btnW, btnH);
         bool meowHover = Raylib.CheckCollisionPointRec(mouse, meowBtn);
         Raylib.DrawRectangleRounded(meowBtn, 0.35f, 10, meowHover ? btnBgHover : btnBg);
         Raylib.DrawRectangleRoundedLines(meowBtn, 0.35f, 10, 2, btnOutline);
         Raylib.DrawText(playText, (int)(meowBtn.X + (meowBtn.Width - playW) / 2f), (int)(meowBtn.Y + 4), btnFontPx, btnInk);
         Raylib.DrawText("2: meow", tx + btnW + btnGap, ty, bodyPx, soundLineCol);
+
         float waveY1 = meowBtn.Y + (btnH - waveH) * 0.5f;
         var meowWave = new Rectangle(tx + btnW + btnGap + 120 + waveGap, waveY1, waveW, waveH);
         bool meowWaveHover = Raylib.CheckCollisionPointRec(mouse, meowWave);
