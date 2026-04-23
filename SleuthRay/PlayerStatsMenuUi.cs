@@ -227,25 +227,21 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         }
         else if (currentPage == PlayerStatsMenuPage.Samples)
         {
-            var soundLineCol = new Color((byte)170, (byte)188, (byte)210, (byte)255);
-            var btnBg = new Color((byte)18, (byte)24, (byte)38, (byte)235);
-            var btnBgHover = new Color((byte)26, (byte)34, (byte)54, (byte)245);
-            var btnInk = new Color((byte)235, (byte)242, (byte)255, (byte)255);
-            var btnOutline = new Color((byte)90, (byte)110, (byte)150, (byte)255);
-
-            const int btnW = 64;
-            const int btnH = 24;
-            const int btnFontPx = 16;
-            const int btnGap = 10;
-            const int waveGap = 10;
-            int waveW = Math.Max(140, contentW - (btnW + btnGap + 160));
-            int waveH = 44;
-            int soundRowStep = waveH + 18 + hintPx + 6; // waveform + padding + metadata line
-
+            var titleCol = new Color((byte)230, (byte)236, (byte)248, (byte)255);
+            var metaCol = new Color((byte)150, (byte)168, (byte)195, (byte)255);
             var waveBg = new Color((byte)12, (byte)16, (byte)26, (byte)210);
             var waveOutline = new Color((byte)70, (byte)90, (byte)125, (byte)255);
             var waveInk = new Color((byte)170, (byte)220, (byte)255, (byte)255);
-            var metaCol = new Color((byte)150, (byte)168, (byte)195, (byte)255);
+
+            var itemBg = new Color((byte)18, (byte)24, (byte)38, (byte)190);
+            var itemBgHover = new Color((byte)26, (byte)34, (byte)54, (byte)230);
+            var itemOutline = new Color((byte)70, (byte)90, (byte)125, (byte)255);
+
+            int waveW = Math.Max(160, contentW);
+            const int waveH = 54;
+            const int itemPad = 12;
+            const int itemGap = 14;
+            int itemH = itemPad + bodyPx + 8 + waveH + itemPad;
 
             static void DrawWave(Rectangle r, ReadOnlySpan<float> peaks, Color bg, Color outline, Color ink)
             {
@@ -273,59 +269,36 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
 
             int ty = contentY;
 
-            void DrawSampleRow(
-                int rowTopY,
-                string meta,
-                string label,
-                PlayerStatsMenuUiSoundRequest request,
+            void DrawSampleItem(
+                int topY,
+                string name,
+                string info,
                 PlayerStatsMenuSample sampleId,
                 ReadOnlySpan<float> waveform)
             {
-                if (meta.Length > 0)
-                {
-                    Raylib.DrawText(meta, contentX, rowTopY, hintPx, metaCol);
-                    rowTopY += hintPx + 6;
-                }
+                var item = new Rectangle(contentX, topY, contentW, itemH);
+                bool hover = Raylib.CheckCollisionPointRec(mouse, item);
+                Raylib.DrawRectangleRounded(item, 0.14f, 10, hover ? itemBgHover : itemBg);
+                Raylib.DrawRectangleRoundedLines(item, 0.14f, 10, 2, itemOutline);
 
-                Rectangle btn = new(contentX, rowTopY - 1, btnW, btnH);
-                bool btnHover = Raylib.CheckCollisionPointRec(mouse, btn);
-                Raylib.DrawRectangleRounded(btn, 0.35f, 10, btnHover ? btnBgHover : btnBg);
-                Raylib.DrawRectangleRoundedLines(btn, 0.35f, 10, 2, btnOutline);
+                int line1Y = topY + itemPad;
+                string line1 = info.Length > 0 ? $"{name}  ·  {info}" : name;
+                Raylib.DrawText(line1, contentX + itemPad, line1Y, bodyPx, titleCol);
 
-                const string playText = "Play";
-                int playW = Raylib.MeasureText(playText, btnFontPx);
-                Raylib.DrawText(playText, (int)(btn.X + (btn.Width - playW) / 2f), (int)(btn.Y + 4), btnFontPx, btnInk);
+                int waveY = line1Y + bodyPx + 8;
+                var waveRect = new Rectangle(contentX + itemPad, waveY, contentW - itemPad * 2, waveH);
+                DrawWave(waveRect, waveform, waveBg, waveOutline, waveInk);
 
-                int labelX = contentX + btnW + btnGap;
-                Raylib.DrawText(label, labelX, rowTopY, bodyPx, soundLineCol);
-                int labelW = Raylib.MeasureText(label, bodyPx);
-                var labelRect = new Rectangle(labelX, rowTopY - 2, labelW, bodyPx + 6);
-                bool labelHover = Raylib.CheckCollisionPointRec(mouse, labelRect);
-                if (labelHover)
-                {
-                    Raylib.DrawLine(labelX, rowTopY + bodyPx + 2, labelX + labelW, rowTopY + bodyPx + 2, new Color((byte)170, (byte)220, (byte)255, (byte)255));
-                }
-
-                float waveY = btn.Y; // top align
-                var wave = new Rectangle(contentX + btnW + btnGap + 120 + waveGap, waveY, waveW, waveH);
-                bool waveHover = Raylib.CheckCollisionPointRec(mouse, wave);
-                DrawWave(wave, waveform, waveBg, waveOutline, waveInk);
-
-                if (click && (btnHover || waveHover))
-                {
-                    req = request;
-                }
-
-                if (click && labelHover)
+                if (click && hover)
                 {
                     sample = sampleId;
                     page = PlayerStatsMenuPage.SampleDetail;
                 }
             }
 
-            DrawSampleRow(ty, gunshotAudioInfo, "1: gunshot", PlayerStatsMenuUiSoundRequest.Gunshot, PlayerStatsMenuSample.Gunshot, gunshotWaveform);
-            ty += soundRowStep;
-            DrawSampleRow(ty, meowAudioInfo, "2: meow", PlayerStatsMenuUiSoundRequest.Meow, PlayerStatsMenuSample.Meow, meowWaveform);
+            DrawSampleItem(ty, "Gunshot", gunshotAudioInfo, PlayerStatsMenuSample.Gunshot, gunshotWaveform);
+            ty += itemH + itemGap;
+            DrawSampleItem(ty, "Meow", meowAudioInfo, PlayerStatsMenuSample.Meow, meowWaveform);
         }
         else // SampleDetail
         {

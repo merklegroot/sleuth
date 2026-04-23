@@ -2053,7 +2053,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
             // Soundboard (only active while the stats menu is open).
             bool sound1Held = Raylib.IsKeyDown(KeyboardKey.KEY_ONE) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_1);
             bool sound2Held = Raylib.IsKeyDown(KeyboardKey.KEY_TWO) || Raylib.IsKeyDown(KeyboardKey.KEY_KP_2);
-            if (statsMenuOpen && (statsMenuPage == PlayerStatsMenuPage.Samples || statsMenuPage == PlayerStatsMenuPage.SampleDetail))
+            if (statsMenuOpen && statsMenuPage == PlayerStatsMenuPage.SampleDetail)
             {
                 if (sound1Held && !prevSound1Held && gunshotSoundReady)
                 {
