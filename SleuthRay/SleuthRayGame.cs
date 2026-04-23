@@ -404,7 +404,7 @@ internal sealed class SleuthRayGame : ISleuthRayGame
         int frameIndex = 0;
         bool showInputDebugOverlay = false;
         bool statsMenuOpen = false;
-        var statsMenuPage = PlayerStatsMenuPage.StatusInventory;
+        var statsMenuPage = PlayerStatsMenuPage.Samples;
         var statsMenuSample = PlayerStatsMenuSample.Gunshot;
         bool gamePaused = true;
         wandererSpeech = _wandererTalkPicker.Pick(WandererTalkKind.Spawn);

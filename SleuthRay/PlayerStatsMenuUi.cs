@@ -5,9 +5,10 @@ namespace SleuthRay;
 
 public enum PlayerStatsMenuPage
 {
-    StatusInventory = 0,
-    Samples = 1,
-    SampleDetail = 2,
+    Status = 0,
+    Inventory = 1,
+    Samples = 2,
+    SampleDetail = 3,
 }
 
 public enum PlayerStatsMenuSample
@@ -137,10 +138,12 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
             return r;
         }
 
-        MakeNavItem(navCursorY, "Status / inventory", PlayerStatsMenuPage.StatusInventory, currentPage == PlayerStatsMenuPage.StatusInventory);
-        navCursorY += navItemH + navGap;
         bool samplesSelected = currentPage == PlayerStatsMenuPage.Samples || currentPage == PlayerStatsMenuPage.SampleDetail;
         MakeNavItem(navCursorY, "Samples", PlayerStatsMenuPage.Samples, samplesSelected);
+        navCursorY += navItemH + navGap;
+        MakeNavItem(navCursorY, "Status", PlayerStatsMenuPage.Status, currentPage == PlayerStatsMenuPage.Status);
+        navCursorY += navItemH + navGap;
+        MakeNavItem(navCursorY, "Inventory", PlayerStatsMenuPage.Inventory, currentPage == PlayerStatsMenuPage.Inventory);
 
         // Right content area
         int contentX = navX + navW + 18;
@@ -152,7 +155,8 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         {
             PlayerStatsMenuPage.SampleDetail => "Sample details",
             PlayerStatsMenuPage.Samples => "Samples",
-            _ => "Status & inventory",
+            PlayerStatsMenuPage.Inventory => "Inventory",
+            _ => "Status",
         };
 
         int titleX = contentX;
@@ -202,7 +206,7 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
         Raylib.DrawText(title, titleX, contentY, titlePx, new Color((byte)230, (byte)236, (byte)248, (byte)255));
         contentY += titlePx + 14;
 
-        if (currentPage == PlayerStatsMenuPage.StatusInventory)
+        if (currentPage == PlayerStatsMenuPage.Status)
         {
             Raylib.DrawText($"Health: {health} / {maxHealth}", contentX, contentY, bodyPx, new Color((byte)200, (byte)220, (byte)255, (byte)255));
             contentY += bodyPx + 10;
@@ -213,8 +217,10 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
             int tileY = th > 1e-3f ? (int)MathF.Floor(worldPos.Y / th) : 0;
             Raylib.DrawText($"Position (tile): {tileX}, {tileY}", contentX, contentY, bodyPx, new Color((byte)170, (byte)188, (byte)210, (byte)255));
             contentY += bodyPx + 18;
-
-            Raylib.DrawText("Inventory", contentX, contentY, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
+        }
+        else if (currentPage == PlayerStatsMenuPage.Inventory)
+        {
+            Raylib.DrawText("Items", contentX, contentY, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
             contentY += bodyPx + 8;
             Raylib.DrawText("No items yet.", contentX, contentY, bodyPx, new Color((byte)150, (byte)160, (byte)175, (byte)255));
             contentY += bodyPx + 18;
