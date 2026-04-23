@@ -272,8 +272,6 @@ internal sealed class PlayerStatsMenuUi : IPlayerStatsMenuUi
             }
 
             int ty = contentY;
-            Raylib.DrawText("Sound effects", contentX, ty, bodyPx, new Color((byte)220, (byte)200, (byte)160, (byte)255));
-            ty += bodyPx + 10;
 
             void DrawSampleRow(
                 int rowTopY,
