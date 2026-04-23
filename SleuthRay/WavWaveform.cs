@@ -32,6 +32,51 @@ internal static class WavWaveform
         return sampleRateHz > 0 && durationSeconds >= 0f;
     }
 
+    /// <summary>Returns overall RMS amplitude in 0..1 for PCM / IEEE-float WAV data.</summary>
+    public static bool TryGetRms(ReadOnlySpan<byte> wavBytes, out float rms01)
+    {
+        rms01 = 0f;
+        if (!TryPreparePcmWave(wavBytes, out WavPcmWaveView view))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<byte> data = view.Data;
+        int frameCount = view.FrameCount;
+        ushort channels = view.Channels;
+        ushort bitsPerSample = view.BitsPerSample;
+        bool f32 = view.IsFloat32;
+
+        int bytesPerSample = (bitsPerSample + 7) / 8;
+        int frameBytes = bytesPerSample * channels;
+        if (frameBytes <= 0 || frameCount <= 0)
+        {
+            return false;
+        }
+
+        double sumSq = 0.0;
+        long sampleCount = 0;
+        for (int fi = 0; fi < frameCount; fi++)
+        {
+            int frameOff = fi * frameBytes;
+            for (int ch = 0; ch < channels; ch++)
+            {
+                int sOff = frameOff + ch * bytesPerSample;
+                float v = f32 ? ReadF32(data, sOff) : ReadPcm(data, sOff, bitsPerSample);
+                sumSq += (double)v * v;
+                sampleCount++;
+            }
+        }
+
+        if (sampleCount <= 0)
+        {
+            return false;
+        }
+
+        rms01 = Math.Clamp((float)Math.Sqrt(sumSq / sampleCount), 0f, 1f);
+        return true;
+    }
+
     /// <summary>Formats duration and sample rate for UI (invariant).</summary>
     public static string FormatAudioInfoLine(ReadOnlySpan<byte> wavBytes)
     {
@@ -42,7 +87,13 @@ internal static class WavWaveform
 
         string d = dur.ToString("0.###", CultureInfo.InvariantCulture);
         string s = sr.ToString("N0", CultureInfo.InvariantCulture);
-        return $"{d} s · {s} Hz";
+        string rms = "";
+        if (TryGetRms(wavBytes, out float rms01))
+        {
+            rms = $" · RMS {rms01.ToString("0.###", CultureInfo.InvariantCulture)}";
+        }
+
+        return $"{d} s · {s} Hz{rms}";
     }
 
     /// <summary>
